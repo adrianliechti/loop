@@ -24,6 +24,8 @@ type Client interface {
 
 	PodExec(ctx context.Context, namespace, name, container string, command []string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error
 	PodPortForward(ctx context.Context, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error
+
+	WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
 }
 
 func New() (Client, error) {

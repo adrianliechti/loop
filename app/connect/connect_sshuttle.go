@@ -88,23 +88,10 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 		return nil, err
 	}
 
-	// TODO: Fix me
-	for {
-		time.Sleep(10 * time.Second)
+	pod, err := client.WaitForPod(ctx, namespace, name)
+	time.Sleep(10 * time.Second)
 
-		pod, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-
-		if err != nil {
-			continue
-		}
-
-		if pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		time.Sleep(10 * time.Second)
-		return pod, nil
-	}
+	return pod, err
 }
 
 func deleteShuttle(ctx context.Context, client kubernetes.Client, namespace, name string) error {
