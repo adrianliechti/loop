@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sshuttle"
 
 	"github.com/google/uuid"
 
@@ -16,8 +18,17 @@ import (
 )
 
 func runShuttle(ctx context.Context, client kubernetes.Client, namespace string) error {
-	kubectl := "kubectl"
-	sshuttle := "sshuttle"
+	kubectl, _, err := kubectl.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	sshuttle, _, err := sshuttle.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
 
 	name := "loop-sshuttle-" + uuid.New().String()[0:7]
 
