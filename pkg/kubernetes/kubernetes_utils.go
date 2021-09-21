@@ -76,3 +76,31 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 		}
 	}
 }
+
+func (c *client) WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
+	timeout := time.After(120 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("cancelled")
+		case <-timeout:
+			return nil, errors.New("timeout")
+		case <-ticker.C:
+			service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+
+			if err != nil {
+				continue
+			}
+
+			if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				for _, ingress := range service.Status.LoadBalancer.Ingress {
+					if ingress.IP != "" {
+						return service, nil
+					}
+				}
+			}
+		}
+	}
+}

@@ -26,6 +26,7 @@ type Client interface {
 	PodPortForward(ctx context.Context, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error
 
 	WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
+	WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error)
 }
 
 func New() (Client, error) {
