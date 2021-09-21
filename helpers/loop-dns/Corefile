@@ -1,0 +1,15 @@
+. {
+    log
+    debug
+    errors
+
+    whoami
+
+    hosts kubernetes {
+        ttl 30
+        reload 30s
+        fallthrough
+    }
+
+    forward . 1.1.1.1 1.0.0.1
+}
