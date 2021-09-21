@@ -1,4 +1,4 @@
-# Loop - Supporting your DevOps Loop
+# DevOps Loop Power-Ups
 
 ## Requirements
 
@@ -11,6 +11,21 @@
   (e.g. [Docker Desktop](https://docs.docker.com/get-docker/))
 
 - Some networking features will ask for root/sudo permissions
+
+
+## Install
+
+Homebrew
+
+```
+brew install adrianliechti/tap/loop
+```
+
+
+## Current State
+
+- Highly in Progress
+- Commands, arguments and output will change
 
 
 ## Feature & Usage
@@ -151,8 +166,3 @@ Scan for vulnerability and configuration issue using
 ```
 docker scan --image <image>[:<tag>]
 ```
-
-## Current State
-
-- Highly in Progress
-- Commands, arguments and output will change
