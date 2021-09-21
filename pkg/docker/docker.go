@@ -19,25 +19,6 @@ var (
 	errOutdated = errors.New("docker is outdated. see https://docs.docker.com/get-docker/")
 )
 
-// func Run(ctx context.Context, dir string, arg ...string) error {
-// 	tool, _, err := Tool(ctx)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	cmd := exec.CommandContext(ctx, tool, arg...)
-// 	cmd.Stdin = os.Stdin
-// 	cmd.Stdout = os.Stdout
-// 	cmd.Stderr = os.Stderr
-
-// 	if dir != "" {
-// 		cmd.Dir = dir
-// 	}
-
-// 	return cmd.Run()
-// }
-
 func Tool(ctx context.Context) (string, *semver.Version, error) {
 	path, version, err := Path(ctx)
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 )
 
@@ -38,7 +39,11 @@ var importCommand = &cli.Command{
 }
 
 func importConfig(ctx context.Context, client kubernetes.Client, path string) error {
-	kubectl := "kubectl"
+	kubectl, _, err := kubectl.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
 
 	files := []string{
 		path,

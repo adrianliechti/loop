@@ -9,6 +9,7 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 )
 
@@ -49,7 +50,11 @@ func selectContexts(ctx context.Context, client kubernetes.Client) error {
 }
 
 func switchContext(ctx context.Context, client kubernetes.Client, context string) error {
-	kubectl := "kubectl"
+	kubectl, _, err := kubectl.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.CommandContext(ctx, kubectl, "config", "use-context", context)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+client.ConfigPath())
@@ -66,7 +71,11 @@ func switchContext(ctx context.Context, client kubernetes.Client, context string
 }
 
 func listContexts(ctx context.Context, client kubernetes.Client) ([]string, error) {
-	kubectl := "kubectl"
+	kubectl, _, err := kubectl.Tool(ctx)
+
+	if err != nil {
+		return nil, err
+	}
 
 	cmd := exec.CommandContext(ctx, kubectl, "config", "get-contexts", "-o", "name")
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+client.ConfigPath())

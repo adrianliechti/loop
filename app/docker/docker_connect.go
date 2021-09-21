@@ -8,6 +8,7 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/to"
 
@@ -37,17 +38,23 @@ var connectCommand = &cli.Command{
 }
 
 func connectDaemon(ctx context.Context, client kubernetes.Client, namespace, port string) error {
+	docker, _, err := docker.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
 	loopContext := "loop"
 	currentContext := "default"
 
-	if c, err := exec.Command("docker", "context", "show").Output(); err == nil {
+	if c, err := exec.Command(docker, "context", "show").Output(); err == nil {
 		currentContext = strings.TrimRight(string(c), "\n")
 	}
 
 	defer func() {
 		cli.Info("Resetting Docker context to \"" + currentContext + "\"")
-		exec.Command("docker", "context", "use", currentContext).Run()
-		exec.Command("docker", "context", "rm", loopContext).Run()
+		exec.Command(docker, "context", "use", currentContext).Run()
+		exec.Command(docker, "context", "rm", loopContext).Run()
 	}()
 
 	name := "loop-docker-" + uuid.New().String()[0:7]
@@ -74,9 +81,9 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace, por
 		<-ready
 
 		cli.Info("Setting Docker context to \"" + loopContext + "\"")
-		exec.Command("docker", "context", "rm", loopContext).Run()
-		exec.Command("docker", "context", "create", loopContext, "--docker", "host=tcp://127.0.0.1:"+port).Run()
-		exec.Command("docker", "context", "use", loopContext).Run()
+		exec.Command(docker, "context", "rm", loopContext).Run()
+		exec.Command(docker, "context", "create", loopContext, "--docker", "host=tcp://127.0.0.1:"+port).Run()
+		exec.Command(docker, "context", "use", loopContext).Run()
 
 		cli.Info("Press ctrl-c to stop Docker daemon")
 	}()
@@ -168,23 +175,10 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 		return nil, err
 	}
 
-	// TODO: Fix me
-	for {
-		time.Sleep(10 * time.Second)
+	pod, err := client.WaitForPod(ctx, namespace, name)
+	time.Sleep(10 * time.Second)
 
-		pod, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-
-		if err != nil {
-			continue
-		}
-
-		if pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		time.Sleep(10 * time.Second)
-		return pod, nil
-	}
+	return pod, err
 }
 
 func deleteDaemon(ctx context.Context, client kubernetes.Client, namespace, name string) error {

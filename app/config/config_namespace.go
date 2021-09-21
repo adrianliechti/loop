@@ -8,6 +8,7 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,7 +55,11 @@ func selectNamespaces(ctx context.Context, client kubernetes.Client) error {
 }
 
 func switchNamespace(ctx context.Context, client kubernetes.Client, namespace string) error {
-	kubectl := "kubectl"
+	kubectl, _, err := kubectl.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.CommandContext(ctx, kubectl, "config", "set-context", "--current", "--namespace", namespace)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+client.ConfigPath())
