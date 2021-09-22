@@ -65,6 +65,13 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 	labels := tunnelLabels(name)
 	selector := tunnelSelector(name)
 
+	cli.Infof("Creating tunnel (%s/%s)...", namespace, name)
+
+	defer func() {
+		cli.Infof("Deleting tunnel (%s/%s)...", namespace, name)
+		deleteTunnel(context.Background(), client, namespace, name)
+	}()
+
 	container := corev1.Container{
 		Name:  "tunnel",
 		Image: "adrianliechti/loop-tunnel",
@@ -92,16 +99,9 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 		},
 	}
 
-	cli.Infof("Creating tunnel pod (%s/%s)...", namespace, name)
-
 	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Deleting tunnel pod (%s/%s)...", namespace, name)
-		client.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	}()
 
 	if _, err := client.WaitForPod(ctx, namespace, name); err != nil {
 		return err
@@ -139,16 +139,9 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 		service.Spec.Ports = append(service.Spec.Ports, portSpec)
 	}
 
-	cli.Infof("Creating tunnel service (%s/%s)...", namespace, name)
-
 	if _, err := client.CoreV1().Services(namespace).Create(ctx, service, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Deleting tunnel service (%s/%s)...", namespace, name)
-		client.CoreV1().Services(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	}()
 
 	if _, err := client.WaitForService(ctx, namespace, name); err != nil {
 		return err
@@ -213,16 +206,9 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 			},
 		}
 
-		cli.Infof("Creating tunnel ingress (%s/%s)...", namespace, name)
-
 		if _, err := client.NetworkingV1().Ingresses(namespace).Create(ctx, ingress, metav1.CreateOptions{}); err != nil {
 			return err
 		}
-
-		defer func() {
-			cli.Infof("Deleting tunnel ingress (%s/%s)...", namespace, name)
-			client.NetworkingV1().Ingresses(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-		}()
 	}
 
 	ready := make(chan struct{})
@@ -240,12 +226,20 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 
 		if options.ServiceHost != "" {
 			for s, t := range options.ServicePorts {
-				cli.Infof("Forwarding tcp://%s:%d => http://localhost:%d", options.ServiceHost, t, s)
+				cli.Infof("Forwarding tcp://%s:%d => tcp://localhost:%d", options.ServiceHost, t, s)
 			}
 		}
 	}()
 
 	return connectTunnel(ctx, client, namespace, name, options.ServicePorts, ready)
+}
+
+func deleteTunnel(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+	client.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	client.CoreV1().Services(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	client.NetworkingV1().Ingresses(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+
+	return nil
 }
 
 func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports map[int]int, readyChan chan struct{}) error {
