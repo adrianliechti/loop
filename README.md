@@ -50,6 +50,53 @@ List available namespaces or set default namespace
 loop config namespace [<namespace>]
 ```
 
+
+### Cluster Network Access
+
+This commands starts a lightwight VPN using [sshuttle](https://github.com/sshuttle/sshuttle) to route traffic to your cluster subnet.
+
+```
+loop connect [--namespace <namespace>]
+
+namespace: namespace to create temporary helper in (default: default)
+```
+
+
+### Cluster Services Access
+
+Catapult allows you to connect to cluster services using their cluster network address or dns names.
+This works by temporarly modifing your hosts file (/etc/hosts) and start multiple port forwardings.
+
+```
+loop catapult [--namespace <namespace>] [--scope <scope>]
+
+namespace: forward only services of specified namespace
+scope:     scope the namespace for DNS resolutions
+```
+
+### Expose local Servers
+
+Expose local http server
+
+```
+loop expose http --port <port> --host <hostname> [--namespace <name>] [--namespace <namespace>]
+
+port:      local tcp port to expose
+hostname:  external hostname of ingress
+namespace: namespace to create temporary tunnel in (default: default)
+name:      name of tunnel deployment and service
+```
+
+```
+loop expose tcp --port <port> [--host <hostname>] [--namespace <name>] [--namespace <namespace>]
+
+port:      local tcp ports to expose (can be specified multiple times)
+hostname:  external hostname of load balancer service (needs External-DNS)
+namespace: namespace to create temporary tunnel in (default: default)
+name:      name of tunnel deployment and service
+```
+
+
 ### Applications
 
 List applications on cluster or specified namespace
@@ -76,6 +123,7 @@ loop app logs --name <namespace> [--namespace <namespace>]
 namespace: application namespace
 ```
 
+
 ### Application Utilities
 
 Count lines of source code and comments in the current workdir
@@ -92,29 +140,6 @@ loop pack --image <image> [--builder <builder image>]
 
 image:   application image
 builder: builder image
-```
-
-### Cluster Services Access
-
-Catapult allows you to connect to cluster services using their cluster network address or dns names.
-This works by temporarly modifing your hosts file (/etc/hosts) and start multiple port forwardings.
-
-```
-loop catapult [--namespace <namespace>] [--scope <scope>]
-
-namespace: forward only services of specified namespace
-scope:     scope the namespace for DNS resolutions
-```
-
-
-### Cluster Network Access
-
-This commands starts a lightwight VPN using [sshuttle](https://github.com/sshuttle/sshuttle) to route traffic to your cluster subnet.
-
-```
-loop connect [--namespace <namespace>]
-
-namespace: namespace to create temporary helper in (default: default)
 ```
 
 
