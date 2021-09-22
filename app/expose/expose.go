@@ -10,6 +10,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
@@ -248,7 +249,11 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 }
 
 func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports map[int]int, readyChan chan struct{}) error {
-	ssh := "ssh"
+	ssh, _, err := ssh.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
 
 	kubectl, _, err := kubectl.Tool(ctx)
 
