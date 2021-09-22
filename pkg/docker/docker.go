@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -150,7 +151,7 @@ type RunOptions struct {
 	Privileged bool
 
 	Env     map[string]string
-	Ports   map[string]string
+	Ports   map[int]int
 	Volumes map[string]string
 }
 
@@ -188,7 +189,7 @@ func RunInteractive(ctx context.Context, image string, options RunOptions, args 
 	}
 
 	for source, target := range options.Ports {
-		runArgs = append(runArgs, "-p", "127.0.0.1:"+source+":"+target)
+		runArgs = append(runArgs, "-p", fmt.Sprintf("127.0.0.1:%d:%d", source, target))
 	}
 
 	for source, target := range options.Volumes {

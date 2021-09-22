@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -31,13 +32,13 @@ var connectCommand = &cli.Command{
 
 		namespace := app.NamespaceOrDefault(c)
 
-		port := app.MustRandomPort(c, "2375")
+		port := app.MustRandomPort(c, 2375)
 
 		return connectDaemon(c.Context, client, namespace, port)
 	},
 }
 
-func connectDaemon(ctx context.Context, client kubernetes.Client, namespace, port string) error {
+func connectDaemon(ctx context.Context, client kubernetes.Client, namespace string, port int) error {
 	docker, _, err := docker.Tool(ctx)
 
 	if err != nil {
@@ -71,8 +72,8 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace, por
 		deleteDaemon(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
-	ports := map[string]string{
-		port: "2375",
+	ports := map[int]int{
+		port: 2375,
 	}
 
 	ready := make(chan struct{})
@@ -82,7 +83,7 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace, por
 
 		cli.Info("Setting Docker context to \"" + loopContext + "\"")
 		exec.Command(docker, "context", "rm", loopContext).Run()
-		exec.Command(docker, "context", "create", loopContext, "--docker", "host=tcp://127.0.0.1:"+port).Run()
+		exec.Command(docker, "context", "create", loopContext, "--docker", fmt.Sprintf("host=tcp://127.0.0.1:%d", port)).Run()
 		exec.Command(docker, "context", "use", loopContext).Run()
 
 		cli.Info("Press ctrl-c to stop Docker daemon")

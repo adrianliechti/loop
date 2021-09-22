@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/transport/spdy"
 )
 
-func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error {
+func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
 	pod, err := c.ServicePod(ctx, namespace, name)
 
 	if err != nil {
@@ -22,7 +22,7 @@ func (c *client) ServicePortForward(ctx context.Context, namespace, name, addres
 	return c.PodPortForward(ctx, pod.Namespace, pod.Name, address, ports, readyChan)
 }
 
-func (c *client) PodPortForward(ctx context.Context, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error {
+func (c *client) PodPortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
 	if address == "" {
 		address = "localhost"
 	}
@@ -42,7 +42,7 @@ func (c *client) PodPortForward(ctx context.Context, namespace, name, address st
 	mappings := make([]string, 0)
 
 	for s, t := range ports {
-		mappings = append(mappings, fmt.Sprintf("%s:%s", s, t))
+		mappings = append(mappings, fmt.Sprintf("%d:%d", s, t))
 	}
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, &url.URL{Scheme: "https", Path: path, Host: host})
