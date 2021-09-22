@@ -120,6 +120,7 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 
 	if options.ServiceHost != "" {
 		service.Annotations = map[string]string{
+			"external-dns.alpha.kubernetes.io/ttl":      "10",
 			"external-dns.alpha.kubernetes.io/hostname": strings.TrimRight(options.ServiceHost, ".") + ".",
 		}
 	}
