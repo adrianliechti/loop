@@ -1,6 +1,6 @@
 version = 0.0.1
 
-.PHONY: run build install image-tunnel image-dns
+.PHONY: run build install image-tunnel image-dns image-template
 
 run:
 	go run -ldflags "-X main.version=$(version)" .
@@ -20,3 +20,10 @@ image-tunnel:
 image-dns:
 	docker build helpers/loop-tunnel --tag adrianliechti/loop-tunnel --platform linux/amd64 && \
 	docker push adrianliechti/loop-tunnel
+
+image-template: helpers/loop-template/*
+	for path in $^ ; do \
+		tag=$$(basename $$path) ; \
+		docker build $$path --tag adrianliechti/loop-template:$$tag --platform linux/amd64 ; \
+		docker push adrianliechti/loop-template:$$tag ; \
+	done

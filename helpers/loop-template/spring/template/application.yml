@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+management:
+  server:
+    port: 9090
+
+  security:
+    enabled: false 
+  
+  endpoints:
+    web:
+      exposure:
+        include: "*"

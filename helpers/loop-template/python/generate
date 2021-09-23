@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+export APP_NAME=${APP_NAME:-demo}
+export APP_VERSION=${APP_VERSION:-1.0.0}
+export APP_HOSTNAME=${APP_HOSTNAME:-${APP_NAME,,}.example.com}
+
+export APP_INGRESS=${APP_INGRESS:-false}
+export APP_PERSISTENT=${APP_PERSISTENT:-false}
+
+export CHART_NAME=${CHART_NAME:-${APP_NAME,,}}
+export CHART_VERSION=${CHART_VERSION:-${APP_VERSION}}
+
+export IMAGE_REPOSITORY=${IMAGE_REPOSITORY:-example.com/${APP_NAME,,}}
+export IMAGE_TAG=${IMAGE_TAG:-${APP_VERSION}}
+
+cp -R /template/* .
+find /src -type f -exec envsubst -i {} -o {} -no-unset -no-empty \;
