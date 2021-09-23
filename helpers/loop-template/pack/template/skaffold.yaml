@@ -1,0 +1,18 @@
+apiVersion: skaffold/v2beta10
+kind: Config
+build:
+  artifacts:
+  - image: ${IMAGE_REPOSITORY}
+    buildpacks:
+      builder: "gcr.io/buildpacks/builder"
+  tagPolicy:
+    gitCommit: {}
+deploy:
+  helm:
+    releases:
+    - name: ${CHART_NAME}
+      chartPath: chart
+      artifactOverrides:
+        image: ${IMAGE_REPOSITORY}
+      imageStrategy:
+        helm: {}

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+export APP_NAME=${APP_NAME:-demo}
+export APP_VERSION=${APP_VERSION:-0.0.1-SNAPSHOT}
+export APP_HOSTNAME=${APP_HOSTNAME:-${APP_NAME,,}.example.com}
+
+export APP_INGRESS=${APP_INGRESS:-false}
+export APP_PERSISTENT=${APP_PERSISTENT:-false}
+
+export CHART_NAME=${CHART_NAME:-${APP_NAME,,}}
+export CHART_VERSION=${CHART_VERSION:-${APP_VERSION}}
+
+export IMAGE_REPOSITORY=${IMAGE_REPOSITORY:-example.com/${APP_NAME,,}}
+export IMAGE_TAG=${IMAGE_TAG:-${APP_VERSION}}
+
+export APP_GROUP=${APP_GROUP:-com.example}
+export APP_ARTIFACT=${APP_ARTIFACT:-demo}
+
+cp -R /template/* .
+find /src -type f -exec envsubst -i {} -o {} -no-unset -no-empty \;
+
+curl -s https://start.spring.io/starter.tgz \
+    -d language=java \
+    -d javaVersion=11 \
+    -d type=maven-project \
+    -d artifactId=${APP_ARTIFACT} \
+    -d groupId=${APP_GROUP} \
+    -d name=${APP_NAME} \
+    -d dependencies=web,actuator,prometheus | tar -xzf -
+
+rm src/main/resources/application.*
+mv application.yml src/main/resources/
