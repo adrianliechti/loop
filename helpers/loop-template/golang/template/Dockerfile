@@ -1,10 +1,14 @@
 FROM golang:1.17-alpine3.14 as builder
 
 WORKDIR /src
-COPY . .
 
+COPY go.mod .
+COPY go.sum .
 RUN go mod download
+
+COPY . .
 RUN go build -o ${APP_NAME}
+
 
 FROM alpine:3.14
 

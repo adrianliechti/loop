@@ -1,11 +1,12 @@
 FROM maven:3-openjdk-11-slim as builder
 
 WORKDIR /src
-COPY . .
 
-RUN set -- target/${APP_ARTIFACT}-*.jar && if [ ! -f "$$1" ]; then \
-        mvn clean install -DskipTests --no-transfer-progress; \
-    fi
+COPY pom.xml .
+RUN mvn dependency:go-offline --no-transfer-progress
+
+COPY . .
+RUN mvn clean install -DskipTests --no-transfer-progress
 
 
 FROM openjdk:11-jre-slim-buster

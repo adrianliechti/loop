@@ -152,7 +152,7 @@ var templateCommand = &cli.Command{
 					Name: c.String("name"),
 				}
 
-				return runTemplate(c.Context, "", TemplatePython, options)
+				return runTemplate(c.Context, "", TemplateASPNET, options)
 			},
 		},
 
@@ -173,7 +173,7 @@ var templateCommand = &cli.Command{
 					Name: c.String("name"),
 				}
 
-				return runTemplate(c.Context, "", TemplatePython, options)
+				return runTemplate(c.Context, "", TemplateNginx, options)
 			},
 		},
 		{
@@ -193,7 +193,7 @@ var templateCommand = &cli.Command{
 					Name: c.String("name"),
 				}
 
-				return runTemplate(c.Context, "", TemplatePython, options)
+				return runTemplate(c.Context, "", TemplatePack, options)
 			},
 		},
 	},

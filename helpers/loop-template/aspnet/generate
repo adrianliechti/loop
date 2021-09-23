@@ -19,4 +19,4 @@ cp -R /template/* .
 find /src -type f -exec envsubst -i {} -o {} -no-unset -no-empty \;
 
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
-dotnet new webapi --no-https --no-restore --name ${APP_NAME} --output . --force
+dotnet new webapp --no-https --no-restore --name ${APP_NAME} --output . --force

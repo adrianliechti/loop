@@ -1,11 +1,12 @@
 FROM mcr.microsoft.com/dotnet/core/sdk:3.1 as builder
 
 WORKDIR /src
-COPY . .
 
-RUN set -- bin/Release/netcoreapp3.1/publish/${APP_NAME}.dll && if [ ! -f "$$1" ]; then \
-        dotnet publish -c Release -o /app --nologo --no-self-contained; \
-    fi
+COPY *.csproj .
+RUN dotnet restore
+
+COPY . .
+RUN dotnet publish -c Release -o /app --nologo --no-restore --no-self-contained
 
 
 FROM mcr.microsoft.com/dotnet/core/aspnet:3.1

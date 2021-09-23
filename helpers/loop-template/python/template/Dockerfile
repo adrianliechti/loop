@@ -3,9 +3,11 @@ FROM python:3.9-alpine
 RUN apk add --no-cache ca-certificates tini
 
 WORKDIR /app
-COPY . .
 
+COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
+
+COPY . .
 
 RUN addgroup -g 1000 -S app \
  && adduser -u 1000 -S -G app app \
