@@ -7,35 +7,35 @@ import (
 	"github.com/adrianliechti/loop/pkg/system"
 )
 
-var PortFlag = &cli.StringFlag{
+var PortFlag = &cli.IntFlag{
 	Name:  "port",
 	Usage: "port",
 }
 
-var PortsFlag = &cli.StringSliceFlag{
-	Name:  "ports",
-	Usage: "ports",
+var PortsFlag = &cli.IntSliceFlag{
+	Name:  "port",
+	Usage: "port",
 }
 
-func Port(c *cli.Context) string {
-	return c.String(PortFlag.Name)
+func Port(c *cli.Context) int {
+	return c.Int(PortFlag.Name)
 }
 
-func MustPort(c *cli.Context) string {
+func MustPort(c *cli.Context) int {
 	port := Port(c)
 
-	if port == "" {
+	if port <= 0 {
 		cli.Fatal(errors.New("port missing"))
 	}
 
 	return port
 }
 
-func Ports(c *cli.Context) []string {
-	return c.StringSlice(PortFlag.Name)
+func Ports(c *cli.Context) []int {
+	return c.IntSlice(PortFlag.Name)
 }
 
-func MustPorts(c *cli.Context) []string {
+func MustPorts(c *cli.Context) []int {
 	ports := Ports(c)
 
 	if len(ports) == 0 {
@@ -45,17 +45,17 @@ func MustPorts(c *cli.Context) []string {
 	return ports
 }
 
-func PortOrRandom(c *cli.Context, preference string) (string, error) {
+func PortOrRandom(c *cli.Context, preference int) (int, error) {
 	port := Port(c)
 
-	if port != "" {
+	if port > 0 {
 		return port, nil
 	}
 
 	return system.FreePort(preference)
 }
 
-func MustPortOrRandom(c *cli.Context, preference string) string {
+func MustPortOrRandom(c *cli.Context, preference int) int {
 	port, err := PortOrRandom(c, preference)
 
 	if err != nil {
@@ -65,11 +65,11 @@ func MustPortOrRandom(c *cli.Context, preference string) string {
 	return port
 }
 
-func RandomPort(c *cli.Context, preference string) (string, error) {
+func RandomPort(c *cli.Context, preference int) (int, error) {
 	return system.FreePort(preference)
 }
 
-func MustRandomPort(c *cli.Context, preference string) string {
+func MustRandomPort(c *cli.Context, preference int) int {
 	port, err := RandomPort(c, preference)
 
 	if err != nil {

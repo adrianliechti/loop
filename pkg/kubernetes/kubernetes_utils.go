@@ -6,7 +6,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -44,6 +43,24 @@ func (c *client) ServicePod(ctx context.Context, namespace, name string) (*corev
 	return nil, errors.New("no running pod found")
 }
 
+func (c *client) ServiceAddress(ctx context.Context, namespace, name string) (string, error) {
+	service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+
+	if err != nil {
+		return "", err
+	}
+
+	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		for _, ingress := range service.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				return ingress.IP, nil
+			}
+		}
+	}
+
+	return service.Spec.ClusterIP, nil
+}
+
 func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
 	timeout := time.After(120 * time.Second)
 	ticker := time.NewTicker(5 * time.Second)
@@ -64,7 +81,7 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 			switch pod.Status.Phase {
 			case corev1.PodRunning:
 				return pod, nil
-			case corev1.PodFailed, v1.PodSucceeded:
+			case corev1.PodFailed, corev1.PodSucceeded:
 				return pod, errors.New("failed")
 			}
 
@@ -73,6 +90,40 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 			}
 
 			return pod, nil
+		}
+	}
+}
+
+func (c *client) WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
+	timeout := time.After(120 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("cancelled")
+		case <-timeout:
+			return nil, errors.New("timeout")
+		case <-ticker.C:
+			service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+
+			if err != nil {
+				continue
+			}
+
+			if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				if len(service.Status.LoadBalancer.Ingress) == 0 {
+					continue
+				}
+
+				ingress := service.Status.LoadBalancer.Ingress[0]
+
+				if ingress.IP == "" {
+					continue
+				}
+			}
+
+			return service, nil
 		}
 	}
 }

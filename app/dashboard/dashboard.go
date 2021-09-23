@@ -23,16 +23,16 @@ var Command = &cli.Command{
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		port := app.MustPortOrRandom(c, "9090")
+		port := app.MustPortOrRandom(c, 9090)
 
 		return runDashboard(c.Context, client, port)
 	},
 }
 
-func runDashboard(ctx context.Context, client kubernetes.Client, port string) error {
-	target := "9090"
+func runDashboard(ctx context.Context, client kubernetes.Client, port int) error {
+	target := 9090
 
-	if port == "" {
+	if port == 0 {
 		port = target
 	}
 
@@ -45,7 +45,7 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port string) er
 	}
 
 	options := docker.RunOptions{
-		Ports: map[string]string{
+		Ports: map[int]int{
 			port: target,
 		},
 

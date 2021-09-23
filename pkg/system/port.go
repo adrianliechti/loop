@@ -1,37 +1,33 @@
 package system
 
 import (
+	"fmt"
 	"net"
-	"strconv"
 )
 
-func FreePort(preference string) (string, error) {
+func FreePort(preference int) (int, error) {
 	if port, err := freePort(preference); err == nil {
 		return port, err
 	}
 
-	return freePort("")
+	return freePort(0)
 }
 
-func freePort(port string) (string, error) {
-	if port == "" {
-		port = "0"
-	}
-
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
+func freePort(port int) (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("localhost:%d", port))
 
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 
 	ln, err := net.ListenTCP("tcp", addr)
 
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 
 	defer ln.Close()
 
 	result := ln.Addr().(*net.TCPAddr).Port
-	return strconv.Itoa(result), nil
+	return result, nil
 }

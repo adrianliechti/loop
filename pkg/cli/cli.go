@@ -16,6 +16,8 @@ type Context = cli.Context
 type Command = cli.Command
 
 type Flag = cli.Flag
+type IntFlag = cli.IntFlag
+type IntSliceFlag = cli.IntSliceFlag
 type StringFlag = cli.StringFlag
 type StringSliceFlag = cli.StringSliceFlag
 type BoolFlag = cli.BoolFlag
