@@ -14,5 +14,6 @@ var Command = &cli.Command{
 		logCommand,
 		clocCommand,
 		packCommand,
+		templateCommand,
 	},
 }
