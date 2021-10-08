@@ -13,6 +13,7 @@ var Command = &cli.Command{
 		infoCommand,
 		logCommand,
 		clocCommand,
+		codeCommand,
 		packCommand,
 		templateCommand,
 	},
