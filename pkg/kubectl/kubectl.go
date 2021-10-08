@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"runtime"
 
@@ -77,4 +78,66 @@ func version(ctx context.Context, path string) (*semver.Version, error) {
 	}
 
 	return semver.NewVersion(version.ClientVersion.GitVersion)
+}
+
+func Exec(ctx context.Context, kubeconfig, namespace, name, container string, path string, arg ...string) error {
+	tool, _, err := Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		"--kubeconfig",
+		kubeconfig,
+		"exec",
+		"-it",
+		"-n",
+		namespace,
+		name,
+	}
+
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+
+	args = append(args, "--")
+	args = append(args, path)
+	args = append(args, arg...)
+
+	cmd := exec.CommandContext(ctx, tool, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
+func Attach(ctx context.Context, kubeconfig, namespace, name, container string) error {
+	tool, _, err := Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		"--kubeconfig",
+		kubeconfig,
+		"attach",
+		"-it",
+		"-n",
+		namespace,
+		name,
+	}
+
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+
+	cmd := exec.CommandContext(ctx, tool, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }
