@@ -169,25 +169,25 @@ namespace: namespace to create temporary daemon in (default: default)
 Browse an explore image layers using [dive](https://github.com/wagoodman/dive)
 
 ```
-docker browse --image <image>[:<tag>]
+loop docker browse --image <image>[:<tag>]
 ```
 
 Lint images for security and configuration issues using [dockle](https://github.com/goodwithtech/dockle)
 
 ```
-docker lint --image <image>[:<tag>]
+loop docker lint --image <image>[:<tag>]
 ```
 
 Export Dockerfiles from images using
 [whaler](https://github.com/P3GLEG/Whaler)
 
 ```
-docker analyze --image <image>[:<tag>]
+loop docker analyze --image <image>[:<tag>]
 ```
 
 Scan for vulnerability and configuration issue using
 [trivy](https://github.com/aquasecurity/trivy)
 
 ```
-docker scan --image <image>[:<tag>]
+loop docker scan --image <image>[:<tag>]
 ```
