@@ -1,4 +1,4 @@
-package application
+package template
 
 import (
 	"context"
@@ -24,9 +24,11 @@ var (
 	TemplateSpring  template = "spring"
 )
 
-var templateCommand = &cli.Command{
+var Command = &cli.Command{
 	Name:  "template",
 	Usage: "create new applications from template",
+
+	Category: app.CategoryUtilities,
 
 	Subcommands: []*cli.Command{
 		{

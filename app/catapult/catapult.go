@@ -15,6 +15,8 @@ var Command = &cli.Command{
 	Name:  "catapult",
 	Usage: "connect Kubernetes services",
 
+	Category: app.CategoryCluster,
+
 	Flags: []cli.Flag{
 		app.ScopeFlag,
 		app.NamespaceFlag,
