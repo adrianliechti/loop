@@ -142,6 +142,12 @@ image:   application image
 builder: builder image
 ```
 
+Start a browser based VSCode from using the current workdir
+
+```
+loop app code
+```
+
 
 ### Kubernetes Dashboard
 
