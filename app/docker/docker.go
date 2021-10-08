@@ -9,7 +9,6 @@ var Command = &cli.Command{
 	Usage: "manage Docker daemons",
 
 	Subcommands: []*cli.Command{
-		connectCommand,
 		browseCommand,
 		scanCommand,
 		lintCommand,

@@ -1,4 +1,4 @@
-package docker
+package remote
 
 import (
 	"context"
@@ -19,9 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var connectCommand = &cli.Command{
-	Name:  "connect",
-	Usage: "connect to a remote daemon",
+var dockerCommand = &cli.Command{
+	Name:  "docker",
+	Usage: "run cluster Docker daemon",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

@@ -14,7 +14,7 @@ import (
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
-	"github.com/adrianliechti/loop/app/shell"
+	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/pkg/cli"
 )
 
@@ -46,8 +46,8 @@ func initApp() cli.App {
 		Commands: []*cli.Command{
 			config.Command,
 			connect.Command,
-			shell.Command,
 			expose.Command,
+			remote.Command,
 			catapult.Command,
 			dashboard.Command,
 			docker.Command,
