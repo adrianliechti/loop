@@ -11,7 +11,7 @@ import (
 
 var Command = &cli.Command{
 	Name:  "dashboard",
-	Usage: "run dashboard locally",
+	Usage: "start Kubernetes Dashboard",
 
 	Flags: []cli.Flag{
 		&cli.StringFlag{

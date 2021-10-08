@@ -1,12 +1,12 @@
-package docker
+package image
 
 import (
 	"github.com/adrianliechti/loop/pkg/cli"
 )
 
 var Command = &cli.Command{
-	Name:  "docker",
-	Usage: "manage Docker daemons",
+	Name:  "image",
+	Usage: "Docker image utilities",
 
 	Subcommands: []*cli.Command{
 		browseCommand,

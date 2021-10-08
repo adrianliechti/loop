@@ -1,4 +1,4 @@
-package docker
+package image
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"github.com/adrianliechti/loop/pkg/docker"
 )
 
-var scanCommand = &cli.Command{
-	Name:  "scan",
-	Usage: "scan image using trivy",
+var browseCommand = &cli.Command{
+	Name:  "browse",
+	Usage: "browse image using dive",
 
 	Flags: []cli.Flag{
 		&cli.StringFlag{
@@ -21,18 +21,16 @@ var scanCommand = &cli.Command{
 	Action: func(c *cli.Context) error {
 		image := c.String("image")
 
-		return runTrivy(c.Context, image)
+		return runDive(c.Context, image)
 	},
 }
 
-func runTrivy(ctx context.Context, image string) error {
+func runDive(ctx context.Context, image string) error {
 	options := docker.RunOptions{
-		Env: map[string]string{},
-
 		Volumes: map[string]string{
-			"trivy-cache": "/root/.cache/",
+			"/var/run/docker.sock": "/var/run/docker.sock",
 		},
 	}
 
-	return docker.RunInteractive(ctx, "aquasec/trivy", options, image)
+	return docker.RunInteractive(ctx, "wagoodman/dive", options, image)
 }
