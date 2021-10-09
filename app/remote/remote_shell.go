@@ -27,6 +27,7 @@ var shellCommand = &cli.Command{
 	Usage: "run cluster shell",
 
 	Flags: []cli.Flag{
+		app.NamespaceFlag,
 		&cli.StringFlag{
 			Name:  "image",
 			Usage: "container image to start",
@@ -48,16 +49,17 @@ var shellCommand = &cli.Command{
 		}
 
 		image := c.String("image")
+		namespace := app.NamespaceOrDefault(c)
 
 		if image == "" {
 			image = "debian"
 		}
 
-		return runShell(c.Context, client, path, image, true, true, nil)
+		return runShell(c.Context, client, namespace, image, true, true, path, nil)
 	},
 }
 
-func runShell(ctx context.Context, client kubernetes.Client, path string, image string, stdin, tty bool, ports map[int]int) error {
+func runShell(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
 	containerPort, err := system.FreePort(0)
 
 	if err != nil {
@@ -75,8 +77,6 @@ func runShell(ctx context.Context, client kubernetes.Client, path string, image 
 		cli.Infof("Stopping helper container (%s)...", container)
 		stopServer(context.Background(), container)
 	}()
-
-	namespace := "default"
 
 	cli.Infof("Starting remote container...")
 	pod, err := startPod(ctx, client, namespace, image, stdin, tty)
@@ -282,7 +282,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name st
 		"localhost",
 	}
 
-	command := "mkdir /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/src /mnt/src && exec /bin/ash"
+	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/src /mnt/src && exec /bin/ash"
 
 	if port != 0 {
 		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))

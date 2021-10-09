@@ -30,9 +30,8 @@ var dockerCommand = &cli.Command{
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		namespace := app.NamespaceOrDefault(c)
-
 		port := app.MustRandomPort(c, 2375)
+		namespace := app.NamespaceOrDefault(c)
 
 		return connectDaemon(c.Context, client, namespace, port)
 	},

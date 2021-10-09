@@ -17,6 +17,7 @@ var codeCommand = &cli.Command{
 	Usage: "run cluster VSCode Server",
 
 	Flags: []cli.Flag{
+		app.NamespaceFlag,
 		&cli.StringFlag{
 			Name:  app.PortFlag.Name,
 			Usage: "local server port",
@@ -38,12 +39,13 @@ var codeCommand = &cli.Command{
 		}
 
 		port := app.MustPortOrRandom(c, 3000)
+		namespace := app.NamespaceOrDefault(c)
 
-		return runCode(c.Context, client, path, port, nil)
+		return runCode(c.Context, client, port, namespace, path, nil)
 	},
 }
 
-func runCode(ctx context.Context, client kubernetes.Client, path string, port int, ports map[int]int) error {
+func runCode(ctx context.Context, client kubernetes.Client, port int, namespace, path string, ports map[int]int) error {
 	containerPort, err := system.FreePort(0)
 
 	if err != nil {
@@ -61,8 +63,6 @@ func runCode(ctx context.Context, client kubernetes.Client, path string, port in
 		cli.Infof("Stopping helper container (%s)...", container)
 		stopServer(context.Background(), container)
 	}()
-
-	namespace := "default"
 
 	cli.Infof("Starting remote VSCode...")
 	pod, err := startPod(ctx, client, namespace, "adrianliechti/loop-code", false, false)
