@@ -65,6 +65,7 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 	timeout := time.After(120 * time.Second)
 	ticker := time.NewTicker(5 * time.Second)
 
+LOOP:
 	for {
 		select {
 		case <-ctx.Done():
@@ -78,15 +79,22 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 				continue
 			}
 
-			switch pod.Status.Phase {
-			case corev1.PodRunning:
-				return pod, nil
-			case corev1.PodFailed, corev1.PodSucceeded:
-				return pod, errors.New("failed")
+			if pod.Status.Phase == corev1.PodFailed {
+				return pod, errors.New("pod failed")
+			}
+
+			if pod.Status.Phase == corev1.PodSucceeded {
+				return pod, errors.New("pod succeeded")
 			}
 
 			if pod.Status.Phase != corev1.PodRunning {
 				continue
+			}
+
+			for _, status := range pod.Status.ContainerStatuses {
+				if !status.Ready {
+					continue LOOP
+				}
 			}
 
 			return pod, nil

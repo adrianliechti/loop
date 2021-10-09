@@ -14,6 +14,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
 
@@ -40,8 +41,7 @@ var shellCommand = &cli.Command{
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		serverPort := app.MustRandomPort(c, 0)
-		serverPath, err := os.Getwd()
+		path, err := os.Getwd()
 
 		if err != nil {
 			return err
@@ -53,31 +53,45 @@ var shellCommand = &cli.Command{
 			image = "debian"
 		}
 
-		return runShell(c.Context, client, serverPath, serverPort, image, true, true, nil)
+		return runShell(c.Context, client, path, image, true, true, nil)
 	},
 }
 
-func runShell(ctx context.Context, client kubernetes.Client, path string, port int, image string, stdin, tty bool, ports map[int]int) error {
-	container, err := startServer(ctx, path, port)
+func runShell(ctx context.Context, client kubernetes.Client, path string, image string, stdin, tty bool, ports map[int]int) error {
+	containerPort, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	defer stopServer(context.Background(), container)
+	cli.Infof("Starting helper container...")
+	container, err := startServer(ctx, path, containerPort)
+
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		cli.Infof("Stopping helper container (%s)...", container)
+		stopServer(context.Background(), container)
+	}()
 
 	namespace := "default"
 
+	cli.Infof("Starting remote container...")
 	pod, err := startPod(ctx, client, namespace, image, stdin, tty)
 
 	if err != nil {
 		return err
 	}
 
-	defer stopPod(context.Background(), client, namespace, pod)
+	defer func() {
+		cli.Infof("Stopping remote container (%s/%s)...", namespace, pod)
+		stopPod(context.Background(), client, namespace, pod)
+	}()
 
 	go func() {
-		if err := runTunnel(ctx, client, namespace, pod, port, ports); err != nil {
+		if err := runTunnel(ctx, client, namespace, pod, containerPort, ports); err != nil {
 			cli.Error(err)
 		}
 	}()
@@ -216,9 +230,19 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, image st
 		return "", err
 	}
 
-	if _, err := client.WaitForPod(ctx, namespace, pod.Name); err != nil {
+	if _, err := client.WaitForPod(ctx, pod.Namespace, pod.Name); err != nil {
 		return "", err
 	}
+
+	// reader, err := os.Open(client.ConfigPath())
+
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	// if err := client.CreateFileInPod(ctx, pod.Namespace, pod.Name, "shell", "/run/secrets/loop/kubeconfig", reader); err != nil {
+	// 	return "", err
+	// }
 
 	return pod.Name, nil
 }
