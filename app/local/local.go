@@ -23,5 +23,7 @@ var Command = &cli.Command{
 		redisCommand,
 
 		vaultCommand,
+
+		jupyterCommand,
 	},
 }
