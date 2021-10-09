@@ -22,6 +22,7 @@ var Command = &cli.Command{
 		influxdbCommand,
 		redisCommand,
 
+		minioCommand,
 		vaultCommand,
 
 		codeCommand,
