@@ -12,8 +12,10 @@ import (
 	"github.com/adrianliechti/loop/app/config"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
-	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/image"
+	"github.com/adrianliechti/loop/app/remote"
+	"github.com/adrianliechti/loop/app/template"
 	"github.com/adrianliechti/loop/pkg/cli"
 )
 
@@ -43,14 +45,20 @@ func initApp() cli.App {
 		},
 
 		Commands: []*cli.Command{
+			// Cluster
+			application.Command,
 			config.Command,
 			connect.Command,
-			expose.Command,
 			catapult.Command,
 			dashboard.Command,
-			docker.Command,
 
-			application.Command,
+			// Development
+			expose.Command,
+			remote.Command,
+
+			// Utilities
+			image.Command,
+			template.Command,
 		},
 	}
 }

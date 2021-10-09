@@ -15,7 +15,7 @@ import (
 
 var contextCommand = &cli.Command{
 	Name:  "context",
-	Usage: "switch context",
+	Usage: "switch default context",
 
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)

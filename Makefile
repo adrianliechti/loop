@@ -11,15 +11,15 @@ build:
 install:
 	go build -ldflags "-X main.version=$(version)" -o /usr/local/bin/loop .
 
-images: image-tunnel image-dns
+images: image-code image-dns image-tunnel image-template
 
-image-tunnel:
-	docker build helpers/loop-dns --tag adrianliechti/loop-dns --platform linux/amd64 && \
-	docker push adrianliechti/loop-dns
+image-code:
+	docker build helpers/loop-code --tag adrianliechti/loop-code --platform linux/amd64 && \
+	docker push adrianliechti/loop-code
 
 image-dns:
-	docker build helpers/loop-tunnel --tag adrianliechti/loop-tunnel --platform linux/amd64 && \
-	docker push adrianliechti/loop-tunnel
+	docker build helpers/loop-dns --tag adrianliechti/loop-dns --platform linux/amd64 && \
+	docker push adrianliechti/loop-dns
 
 image-template: helpers/loop-template/*
 	for path in $^ ; do \
@@ -27,3 +27,7 @@ image-template: helpers/loop-template/*
 		docker build $$path --tag adrianliechti/loop-template:$$tag --platform linux/amd64 ; \
 		docker push adrianliechti/loop-template:$$tag ; \
 	done
+
+image-tunnel:
+	docker build helpers/loop-tunnel --tag adrianliechti/loop-tunnel --platform linux/amd64 && \
+	docker push adrianliechti/loop-tunnel

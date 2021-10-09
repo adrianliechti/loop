@@ -1,4 +1,4 @@
-package docker
+package image
 
 import (
 	"context"
@@ -12,15 +12,11 @@ var scanCommand = &cli.Command{
 	Usage: "scan image using trivy",
 
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:     "image",
-			Required: true,
-		},
+		ImageFlag,
 	},
 
 	Action: func(c *cli.Context) error {
-		image := c.String("image")
-
+		image := MustImage(c)
 		return runTrivy(c.Context, image)
 	},
 }

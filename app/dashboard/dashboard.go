@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -11,7 +13,9 @@ import (
 
 var Command = &cli.Command{
 	Name:  "dashboard",
-	Usage: "run dashboard locally",
+	Usage: "start Kubernetes Dashboard",
+
+	Category: app.CategoryCluster,
 
 	Flags: []cli.Flag{
 		&cli.StringFlag{
@@ -54,5 +58,15 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port int) error
 		},
 	}
 
-	return docker.RunInteractive(ctx, "kubernetesui/dashboard:v2.3.1", options, args...)
+	image := "kubernetesui/dashboard:v2.3.1"
+
+	if err := docker.Pull(ctx, image); err != nil {
+		return err
+	}
+
+	time.AfterFunc(5*time.Second, func() {
+		cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
+	})
+
+	return docker.RunInteractive(ctx, image, options, args...)
 }

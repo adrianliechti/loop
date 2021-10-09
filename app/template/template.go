@@ -1,4 +1,4 @@
-package application
+package template
 
 import (
 	"context"
@@ -24,14 +24,18 @@ var (
 	TemplateSpring  template = "spring"
 )
 
-var templateCommand = &cli.Command{
+var Command = &cli.Command{
 	Name:  "template",
 	Usage: "create new applications from template",
+
+	HideHelpCommand: true,
+
+	Category: app.CategoryUtilities,
 
 	Subcommands: []*cli.Command{
 		{
 			Name:  "react",
-			Usage: "create new React web app",
+			Usage: "create React web app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -51,7 +55,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "angular",
-			Usage: "create new Angular app",
+			Usage: "create Angular app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -71,7 +75,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "golang",
-			Usage: "create new Go web app",
+			Usage: "create Go web app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -91,7 +95,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "python",
-			Usage: "create new Python web app",
+			Usage: "create Python web app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -111,7 +115,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "spring",
-			Usage: "create new Java Spring web app",
+			Usage: "create Java Spring web app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -137,7 +141,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "aspnet",
-			Usage: "create new ASP.NET Core app",
+			Usage: "create ASP.NET Core app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -158,7 +162,7 @@ var templateCommand = &cli.Command{
 
 		{
 			Name:  "nginx",
-			Usage: "create new Nginx web app",
+			Usage: "create Nginx web app",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -178,7 +182,7 @@ var templateCommand = &cli.Command{
 		},
 		{
 			Name:  "pack",
-			Usage: "create new app using buildpacks",
+			Usage: "create app using buildpacks",
 
 			Flags: []cli.Flag{
 				&cli.StringFlag{

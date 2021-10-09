@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -24,6 +25,8 @@ import (
 var Command = &cli.Command{
 	Name:  "expose",
 	Usage: "expose local servers",
+
+	Category: app.CategoryDevelopment,
 
 	HideHelpCommand: true,
 

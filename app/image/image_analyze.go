@@ -1,4 +1,4 @@
-package docker
+package image
 
 import (
 	"context"
@@ -12,10 +12,7 @@ var analyzeCommand = &cli.Command{
 	Usage: "analyze image using whaler",
 
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:     "image",
-			Required: true,
-		},
+		ImageFlag,
 		&cli.BoolFlag{
 			Name:  "verbose",
 			Usage: "verbose output",
@@ -23,8 +20,7 @@ var analyzeCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		image := c.String("image")
-
+		image := MustImage(c)
 		return runWhaler(c.Context, image, c.Bool("verbose"))
 	},
 }
