@@ -14,6 +14,7 @@ import (
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/image"
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/app/template"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -53,8 +54,9 @@ func initApp() cli.App {
 			dashboard.Command,
 
 			// Development
-			expose.Command,
+			local.Command,
 			remote.Command,
+			expose.Command,
 
 			// Utilities
 			image.Command,
