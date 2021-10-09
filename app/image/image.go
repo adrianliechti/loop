@@ -9,7 +9,7 @@ import (
 
 var Command = &cli.Command{
 	Name:  "image",
-	Usage: "Docker image utilities",
+	Usage: "image utilities & analyzers",
 
 	HideHelpCommand: true,
 

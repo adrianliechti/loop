@@ -7,7 +7,7 @@ import (
 
 var Command = &cli.Command{
 	Name:  "remote",
-	Usage: "start remote instances",
+	Usage: "remote development instances",
 
 	Category: app.CategoryDevelopment,
 
