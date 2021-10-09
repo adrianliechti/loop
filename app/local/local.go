@@ -24,6 +24,7 @@ var Command = &cli.Command{
 
 		vaultCommand,
 
+		codeCommand,
 		jupyterCommand,
 	},
 }

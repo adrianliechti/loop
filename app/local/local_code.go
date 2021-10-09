@@ -10,22 +10,22 @@ import (
 	"github.com/adrianliechti/loop/pkg/docker"
 )
 
-var jupyterCommand = &cli.Command{
-	Name:  "jupyter",
-	Usage: "local Jupyter server",
+var codeCommand = &cli.Command{
+	Name:  "code",
+	Usage: "local VS Code server",
 
 	Flags: []cli.Flag{
 		app.PortFlag,
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 8888)
-		return startJupyter(c.Context, port)
+		port := app.MustRandomPort(c, 3000)
+		return startCode(c.Context, port)
 	},
 }
 
-func startJupyter(ctx context.Context, port int) error {
-	image := "jupyter/datascience-notebook"
+func startCode(ctx context.Context, port int) error {
+	image := "adrianliechti/loop-code"
 
 	if err := docker.Pull(ctx, image); err != nil {
 		return err
@@ -37,37 +37,28 @@ func startJupyter(ctx context.Context, port int) error {
 		return err
 	}
 
-	target := 8888
+	target := 3000
 
 	if port == 0 {
 		port = target
 	}
 
-	token := "notsecure"
-
 	cli.Info()
 
 	cli.Table([]string{"Name", "Value"}, [][]string{
 		{"Host", fmt.Sprintf("localhost:%d", port)},
-		{"Token", token},
-		{"URL", fmt.Sprintf("http://localhost:%d?token=%s", port, token)},
+		{"URL", fmt.Sprintf("http://localhost:%d", port)},
 	})
 
 	cli.Info()
 
 	options := docker.RunOptions{
-		Env: map[string]string{
-			"JUPYTER_TOKEN":      token,
-			"JUPYTER_ENABLE_LAB": "yes",
-			"RESTARTABLE":        "yes",
-		},
-
 		Ports: map[int]int{
 			port: target,
 		},
 
 		Volumes: map[string]string{
-			path: "/home/jovyan/work",
+			path: "/workspace",
 		},
 	}
 
