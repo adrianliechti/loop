@@ -1,8 +1,8 @@
 package app
 
 const (
-	CategoryCluster = "Cluster"
+	CategoryCluster = "CLUSTER"
 
-	CategoryUtilities   = "Utilities"
-	CategoryDevelopment = "Development"
+	CategoryUtilities   = "UTILITIES"
+	CategoryDevelopment = "DEVELOPMENT"
 )

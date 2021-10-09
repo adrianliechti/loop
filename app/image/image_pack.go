@@ -1,4 +1,4 @@
-package application
+package image
 
 import (
 	"context"
@@ -13,10 +13,7 @@ var packCommand = &cli.Command{
 	Usage: "create Docker image",
 
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:     "image",
-			Required: true,
-		},
+		ImageFlag,
 		&cli.StringFlag{
 			Name:  "builder",
 			Usage: "builder image",
@@ -26,7 +23,7 @@ var packCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		image := c.String("image")
+		image := MustImage(c)
 		builder := c.String("builder")
 
 		return runPack(c.Context, image, builder)

@@ -124,31 +124,6 @@ namespace: application namespace
 ```
 
 
-### Application Utilities
-
-Count lines of source code and comments in the current workdir
-
-```
-loop app cloc
-```
-
-Create a runnable app image from source code in workdir. The command useses [Cloud Native Buildpacks
-](https://buildpacks.io/) and the [Google Builder & Buildpacks](https://github.com/GoogleCloudPlatform/buildpacks) by default
-
-```
-loop pack --image <image> [--builder <builder image>]
-
-image:   application image
-builder: builder image
-```
-
-Start a browser based VSCode from using the current workdir
-
-```
-loop app code
-```
-
-
 ### Kubernetes Dashboard
 
 [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) is a popular web-based admin UI.
@@ -170,30 +145,40 @@ namespace: namespace to create temporary daemon in (default: default)
 ```
 
 
-### Docker Image Analyzers & Utilities
+### Docker Image Utilities
 
 Browse an explore image layers using [dive](https://github.com/wagoodman/dive)
 
 ```
-loop docker browse --image <image>[:<tag>]
+loop image browse --image <image>[:<tag>]
 ```
 
 Lint images for security and configuration issues using [dockle](https://github.com/goodwithtech/dockle)
 
 ```
-loop docker lint --image <image>[:<tag>]
+loop image lint --image <image>[:<tag>]
 ```
 
 Export Dockerfiles from images using
 [whaler](https://github.com/P3GLEG/Whaler)
 
 ```
-loop docker analyze --image <image>[:<tag>]
+loop image analyze --image <image>[:<tag>]
 ```
 
 Scan for vulnerability and configuration issue using
 [trivy](https://github.com/aquasecurity/trivy)
 
 ```
-loop docker scan --image <image>[:<tag>]
+loop image scan --image <image>[:<tag>]
+```
+
+Create a runnable app image from source code in workdir. The command useses [Cloud Native Buildpacks
+](https://buildpacks.io/) and the [Google Builder & Buildpacks](https://github.com/GoogleCloudPlatform/buildpacks) by default
+
+```
+loop image pack --image <image> [--builder <builder image>]
+
+image:   application image
+builder: builder image
 ```

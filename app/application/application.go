@@ -9,14 +9,13 @@ var Command = &cli.Command{
 	Name:  "app",
 	Usage: "manage Kubernetes apps",
 
+	HideHelpCommand: true,
+
 	Category: app.CategoryCluster,
 
 	Subcommands: []*cli.Command{
 		listCommand,
 		infoCommand,
 		logCommand,
-		clocCommand,
-		codeCommand,
-		packCommand,
 	},
 }

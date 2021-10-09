@@ -19,7 +19,7 @@ import (
 
 var infoCommand = &cli.Command{
 	Name:  "info",
-	Usage: "Application info",
+	Usage: "fetch application info",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

@@ -15,7 +15,7 @@ import (
 
 var logCommand = &cli.Command{
 	Name:  "logs",
-	Usage: "Application logs",
+	Usage: "stream application logs",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
