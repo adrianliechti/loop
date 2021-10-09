@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 )
@@ -12,10 +13,13 @@ var mariadbCommand = &cli.Command{
 	Name:  "mariadb",
 	Usage: "local MariaDB server",
 
-	Flags: []cli.Flag{},
+	Flags: []cli.Flag{
+		app.PortFlag,
+	},
 
 	Action: func(c *cli.Context) error {
-		return startMariaDB(c.Context, 0)
+		port := app.MustRandomPort(c, 3306)
+		return startMariaDB(c.Context, port)
 	},
 }
 

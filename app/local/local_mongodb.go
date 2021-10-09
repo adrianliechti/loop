@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 )
@@ -12,10 +13,13 @@ var mongoDBCommand = &cli.Command{
 	Name:  "mongodb",
 	Usage: "local MongoDB server",
 
-	Flags: []cli.Flag{},
+	Flags: []cli.Flag{
+		app.PortFlag,
+	},
 
 	Action: func(c *cli.Context) error {
-		return startMongoDB(c.Context, 0)
+		port := app.MustRandomPort(c, 27017)
+		return startMongoDB(c.Context, port)
 	},
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 )
@@ -12,10 +13,13 @@ var grafanaCommand = &cli.Command{
 	Name:  "grafana",
 	Usage: "local Grafana server",
 
-	Flags: []cli.Flag{},
+	Flags: []cli.Flag{
+		app.PortFlag,
+	},
 
 	Action: func(c *cli.Context) error {
-		return startGrafana(c.Context, 0)
+		port := app.MustRandomPort(c, 3000)
+		return startGrafana(c.Context, port)
 	},
 }
 

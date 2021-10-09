@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 )
@@ -12,10 +13,13 @@ var redisCommand = &cli.Command{
 	Name:  "redis",
 	Usage: "local Redis server",
 
-	Flags: []cli.Flag{},
+	Flags: []cli.Flag{
+		app.PortFlag,
+	},
 
 	Action: func(c *cli.Context) error {
-		return startRedis(c.Context, 0)
+		port := app.MustRandomPort(c, 6379)
+		return startRedis(c.Context, port)
 	},
 }
 
