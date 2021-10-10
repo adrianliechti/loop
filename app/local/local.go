@@ -20,6 +20,7 @@ var Command = &cli.Command{
 
 		influxdbCommand,
 		redisCommand,
+		elasticsearchCommand,
 
 		minioCommand,
 		vaultCommand,
