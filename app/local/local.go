@@ -26,6 +26,7 @@ var Command = &cli.Command{
 		vaultCommand,
 
 		natsCommand,
+		rabbitmqCommand,
 
 		mailtrapCommand,
 
