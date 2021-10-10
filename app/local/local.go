@@ -24,6 +24,8 @@ var Command = &cli.Command{
 		minioCommand,
 		vaultCommand,
 
+		natsCommand,
+
 		mailtrapCommand,
 
 		codeCommand,
