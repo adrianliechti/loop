@@ -18,14 +18,16 @@ var Command = &cli.Command{
 		mongoDBCommand,
 		postgresCommand,
 
-		grafanaCommand,
 		influxdbCommand,
 		redisCommand,
 
 		minioCommand,
 		vaultCommand,
 
+		mailtrapCommand,
+
 		codeCommand,
+		grafanaCommand,
 		jupyterCommand,
 	},
 }
