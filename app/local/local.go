@@ -15,8 +15,9 @@ var Command = &cli.Command{
 
 	Subcommands: []*cli.Command{
 		mariadbCommand,
-		mongoDBCommand,
 		postgresCommand,
+		mongoDBCommand,
+		mssqlCommand,
 
 		influxdbCommand,
 		redisCommand,
