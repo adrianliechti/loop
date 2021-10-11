@@ -13,6 +13,7 @@ import (
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/git"
 	"github.com/adrianliechti/loop/app/image"
 	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/app/remote"
@@ -60,6 +61,7 @@ func initApp() cli.App {
 			expose.Command,
 
 			// Utilities
+			git.Command,
 			tool.Command,
 			image.Command,
 			template.Command,

@@ -1,4 +1,4 @@
-package tool
+package git
 
 import (
 	"github.com/adrianliechti/loop/app"
@@ -6,14 +6,16 @@ import (
 )
 
 var Command = &cli.Command{
-	Name:  "tool",
-	Usage: "development helper tools",
+	Name:  "git",
+	Usage: "git repository tools",
 
 	Category: app.CategoryUtilities,
 
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
-		clocCommand,
+		leaksCommand,
+		blobsCommand,
+		purgeCommand,
 	},
 }
