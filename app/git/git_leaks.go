@@ -50,7 +50,7 @@ func leaks(ctx context.Context) error {
 
 	args := []string{
 		"-v",
-		"--path=/data",
+		"--path=/src",
 		"--config-path=/config",
 	}
 
