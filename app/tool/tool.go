@@ -15,5 +15,8 @@ var Command = &cli.Command{
 
 	Subcommands: []*cli.Command{
 		clocCommand,
+		swaggerCommand,
+		openapiCommand,
+		prismCommand,
 	},
 }
