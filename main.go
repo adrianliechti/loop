@@ -17,6 +17,7 @@ import (
 	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/app/template"
+	"github.com/adrianliechti/loop/app/tool"
 	"github.com/adrianliechti/loop/pkg/cli"
 )
 
@@ -59,6 +60,7 @@ func initApp() cli.App {
 			expose.Command,
 
 			// Utilities
+			tool.Command,
 			image.Command,
 			template.Command,
 		},
