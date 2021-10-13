@@ -25,7 +25,7 @@ var webCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 3000)
+		port := app.MustPortOrRandom(c, 3000)
 		spa := c.Bool("spa")
 
 		return startWebServer(c.Context, port, spa)
