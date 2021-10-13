@@ -12,7 +12,7 @@ import (
 
 var hoppscotchCommand = &cli.Command{
 	Name:  "hoppscotch",
-	Usage: "start Hoppscotch UI",
+	Usage: "start Hoppscotch API client",
 
 	Flags: []cli.Flag{
 		app.PortFlag,

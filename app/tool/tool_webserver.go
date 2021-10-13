@@ -12,9 +12,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-var webCommand = &cli.Command{
-	Name:  "web",
-	Usage: "local Web server",
+var webserverCommand = &cli.Command{
+	Name:  "webserver",
+	Usage: "start simple Web server",
 
 	Flags: []cli.Flag{
 		app.PortFlag,

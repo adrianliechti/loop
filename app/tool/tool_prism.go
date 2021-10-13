@@ -13,7 +13,7 @@ import (
 
 var prismCommand = &cli.Command{
 	Name:  "prism",
-	Usage: "start Prism Mocking",
+	Usage: "start Prism API mock server",
 
 	Flags: []cli.Flag{
 		app.PortFlag,
