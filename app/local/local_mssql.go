@@ -18,7 +18,7 @@ var mssqlCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 1433)
+		port := app.MustPortOrRandom(c, 1433)
 		return startMSSQL(c.Context, port)
 	},
 }

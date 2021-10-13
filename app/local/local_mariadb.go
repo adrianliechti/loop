@@ -18,7 +18,7 @@ var mariadbCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 3306)
+		port := app.MustPortOrRandom(c, 3306)
 		return startMariaDB(c.Context, port)
 	},
 }

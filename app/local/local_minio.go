@@ -18,7 +18,7 @@ var minioCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		apiPort := app.MustRandomPort(c, 9000)
+		apiPort := app.MustPortOrRandom(c, 9000)
 		consolePort := app.MustRandomPort(c, apiPort+1)
 
 		return startMinIO(c.Context, apiPort, consolePort)

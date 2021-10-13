@@ -18,7 +18,7 @@ var postgresCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 5432)
+		port := app.MustPortOrRandom(c, 5432)
 		return startPostgreSQL(c.Context, port)
 	},
 }

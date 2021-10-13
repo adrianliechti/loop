@@ -18,7 +18,7 @@ var mongoDBCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 27017)
+		port := app.MustPortOrRandom(c, 27017)
 		return startMongoDB(c.Context, port)
 	},
 }

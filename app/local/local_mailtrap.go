@@ -14,7 +14,7 @@ var mailtrapCommand = &cli.Command{
 	Usage: "local MailTrap server",
 
 	Flags: []cli.Flag{
-		app.PortFlag,
+		//app.PortFlag,
 	},
 
 	Action: func(c *cli.Context) error {

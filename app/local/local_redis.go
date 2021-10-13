@@ -18,7 +18,7 @@ var redisCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 6379)
+		port := app.MustPortOrRandom(c, 6379)
 		return startRedis(c.Context, port)
 	},
 }

@@ -18,7 +18,7 @@ var natsCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 4222)
+		port := app.MustPortOrRandom(c, 4222)
 		return startNATS(c.Context, port)
 	},
 }

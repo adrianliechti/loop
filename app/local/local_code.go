@@ -19,7 +19,7 @@ var codeCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 3000)
+		port := app.MustPortOrRandom(c, 3000)
 		return startCode(c.Context, port)
 	},
 }

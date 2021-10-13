@@ -18,7 +18,7 @@ var elasticsearchCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 9200)
+		port := app.MustPortOrRandom(c, 9200)
 		return startElasticsearch(c.Context, port)
 	},
 }

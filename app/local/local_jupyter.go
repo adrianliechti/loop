@@ -19,7 +19,7 @@ var jupyterCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 8888)
+		port := app.MustPortOrRandom(c, 8888)
 		return startJupyter(c.Context, port)
 	},
 }

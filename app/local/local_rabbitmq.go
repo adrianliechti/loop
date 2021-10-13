@@ -14,7 +14,7 @@ var rabbitmqCommand = &cli.Command{
 	Usage: "local RabbitMQ server",
 
 	Flags: []cli.Flag{
-		app.PortFlag,
+		//app.PortFlag,
 	},
 
 	Action: func(c *cli.Context) error {

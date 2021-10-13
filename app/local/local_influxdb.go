@@ -18,7 +18,7 @@ var influxdbCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 8086)
+		port := app.MustPortOrRandom(c, 8086)
 		return startInfluxDB(c.Context, port)
 	},
 }

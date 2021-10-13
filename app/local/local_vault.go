@@ -18,7 +18,7 @@ var vaultCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		port := app.MustRandomPort(c, 8200)
+		port := app.MustPortOrRandom(c, 8200)
 		return startVault(c.Context, port)
 	},
 }
