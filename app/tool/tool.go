@@ -18,5 +18,7 @@ var Command = &cli.Command{
 		swaggerCommand,
 		openapiCommand,
 		prismCommand,
+		webCommand,
+		hoppscotchCommand,
 	},
 }
