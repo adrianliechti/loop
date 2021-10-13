@@ -14,6 +14,8 @@ var Command = &cli.Command{
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
+		webCommand,
+
 		mariadbCommand,
 		postgresCommand,
 		mongoDBCommand,
