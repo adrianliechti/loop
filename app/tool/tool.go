@@ -14,11 +14,17 @@ var Command = &cli.Command{
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
+		// Common Tools
 		clocCommand,
+
+		// API Tools
 		swaggerCommand,
 		openapiCommand,
 		prismCommand,
 		hoppscotchCommand,
+
+		// HTTP Tools
 		webserverCommand,
+		proxyCommand,
 	},
 }
