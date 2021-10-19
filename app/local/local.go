@@ -19,8 +19,9 @@ var Command = &cli.Command{
 		mongoDBCommand,
 		mssqlCommand,
 
-		influxdbCommand,
+		etcdCommand,
 		redisCommand,
+		influxdbCommand,
 		elasticsearchCommand,
 
 		minioCommand,
