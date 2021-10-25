@@ -148,6 +148,7 @@ type RunOptions struct {
 	User string
 
 	Tini       bool
+	Platform   string
 	Privileged bool
 
 	Env     map[string]string
@@ -178,6 +179,10 @@ func RunInteractive(ctx context.Context, image string, options RunOptions, args 
 
 	if options.Privileged {
 		runArgs = append(runArgs, "--privileged")
+	}
+
+	if options.Platform != "" {
+		runArgs = append(runArgs, "--platform", options.Platform)
 	}
 
 	if options.Dir != "" {
