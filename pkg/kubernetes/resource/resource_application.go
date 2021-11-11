@@ -116,6 +116,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		ingresses, err = client.NetworkingV1().Ingresses(namespace).
 			List(ctx, metav1.ListOptions{})
 
+		err = nil // ignore ingress list errors for the moment (old clusters)
 		return err
 	})
 

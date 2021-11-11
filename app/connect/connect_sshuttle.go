@@ -32,17 +32,17 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 
 	name := "loop-sshuttle-" + uuid.New().String()[0:7]
 
+	defer func() {
+		cli.Infof("Stopping sshuttle pod (%s/%s)...", namespace, name)
+		deleteShuttle(context.Background(), client, namespace, name)
+	}()
+
 	cli.Infof("Starting sshuttle pod (%s/%s)...", namespace, name)
 	pod, err := createShuttle(ctx, client, namespace, name)
 
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Stopping sshuttle pod (%s/%s)...", namespace, name)
-		deleteShuttle(context.Background(), client, pod.Namespace, pod.Name)
-	}()
 
 	args := []string{
 		"-v",

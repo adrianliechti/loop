@@ -3,6 +3,7 @@ package connect
 import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var Command = &cli.Command{
@@ -17,9 +18,12 @@ var Command = &cli.Command{
 
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
+		namespace := app.Namespace(c)
 
-		namespace := app.NamespaceOrDefault(c)
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
 
-		return runShuttle(c.Context, client, namespace)
+		return runShuttle(c.Context, client, *namespace)
 	},
 }

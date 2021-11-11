@@ -31,13 +31,21 @@ var dockerCommand = &cli.Command{
 		client := app.MustClient(c)
 
 		port := app.MustRandomPort(c, 2375)
-		namespace := app.NamespaceOrDefault(c)
+		namespace := app.Namespace(c)
 
-		return connectDaemon(c.Context, client, namespace, port)
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
+
+		return connectDaemon(c.Context, client, *namespace, port)
 	},
 }
 
 func connectDaemon(ctx context.Context, client kubernetes.Client, namespace string, port int) error {
+	if namespace == "" {
+		namespace = client.Namespace()
+	}
+
 	docker, _, err := docker.Tool(ctx)
 
 	if err != nil {
@@ -59,17 +67,17 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 
 	name := "loop-docker-" + uuid.New().String()[0:7]
 
+	defer func() {
+		cli.Infof("Stopping Docker pod (%s/%s)...", namespace, name)
+		deleteDaemon(context.Background(), client, namespace, name)
+	}()
+
 	cli.Infof("Starting Docker pod (%s/%s)...", namespace, name)
 	pod, err := createDaemon(ctx, client, namespace, name)
 
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Stopping Docker pod (%s/%s)...", namespace, name)
-		deleteDaemon(context.Background(), client, pod.Namespace, pod.Name)
-	}()
 
 	ports := map[int]int{
 		port: 2375,

@@ -49,13 +49,17 @@ var shellCommand = &cli.Command{
 		}
 
 		image := c.String("image")
-		namespace := app.NamespaceOrDefault(c)
+		namespace := app.Namespace(c)
+
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
 
 		if image == "" {
 			image = "debian"
 		}
 
-		return runShell(c.Context, client, namespace, image, true, true, path, nil)
+		return runShell(c.Context, client, *namespace, image, true, true, path, nil)
 	},
 }
 

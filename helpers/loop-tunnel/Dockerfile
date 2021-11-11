@@ -7,12 +7,11 @@ RUN apk add  --no-cache \
     openssh \
     sshfs
 
-RUN ssh-keygen -A && \
-    passwd -d root && \
+RUN passwd -d root && \
     echo -e "NoHostAuthenticationForLocalhost yes\n" > /etc/ssh/ssh_config && \
     echo -e "Port 22\nAllowTcpForwarding yes\nAllowStreamLocalForwarding yes\nGatewayPorts yes\nPermitEmptyPasswords yes\nPermitRootLogin yes\nSubsystem sftp /usr/lib/ssh/sftp-server\n" > /etc/ssh/sshd_config
 
 EXPOSE 22
 
 ENTRYPOINT ["tini", "--"]
-CMD ["/usr/sbin/sshd", "-4", "-D"]
+CMD [ "sh", "-c", "ssh-keygen -A && /usr/sbin/sshd -4 -D" ]
