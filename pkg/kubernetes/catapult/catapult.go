@@ -118,6 +118,10 @@ func Start(ctx context.Context, client kubernetes.Client, options CatapultOption
 					continue
 				}
 
+				if pod.Status.PodIP == "" {
+					continue
+				}
+
 				address, err := addressMapping(pod.Status.PodIP)
 
 				if err != nil {
