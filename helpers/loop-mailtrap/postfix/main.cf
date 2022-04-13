@@ -1,0 +1,12 @@
+transport_maps = hash:/etc/postfix/transport
+luser_relay = mailtrap
+local_recipient_maps =
+mailbox_size_limit = 51200000
+virtual_mailbox_limit = 51200000
+message_size_limit = 10240000
+
+readme_directory = no
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+alias_maps = hash:/etc/aliases
+alias_database = $alias_maps
+inet_interfaces = all

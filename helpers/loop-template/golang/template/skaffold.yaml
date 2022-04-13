@@ -2,15 +2,17 @@ apiVersion: skaffold/v2beta10
 kind: Config
 build:
   artifacts:
-  - image: ${IMAGE_REPOSITORY}
+    - image: ${IMAGE_REPOSITORY}
   tagPolicy:
     gitCommit: {}
+  local:
+    useDockerCLI: true
 deploy:
   helm:
     releases:
-    - name: ${CHART_NAME}
-      chartPath: chart
-      artifactOverrides:
-        image: ${IMAGE_REPOSITORY}
-      imageStrategy:
-        helm: {}
+      - name: ${CHART_NAME}
+        chartPath: chart
+        artifactOverrides:
+          image: ${IMAGE_REPOSITORY}
+        imageStrategy:
+          helm: {}

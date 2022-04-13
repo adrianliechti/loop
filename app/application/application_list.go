@@ -7,6 +7,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/kubernetes/resource"
+	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var listCommand = &cli.Command{
@@ -22,7 +23,11 @@ var listCommand = &cli.Command{
 
 		namespace := app.Namespace(c)
 
-		return listApplications(c.Context, client, namespace)
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
+
+		return listApplications(c.Context, client, *namespace)
 	},
 }
 

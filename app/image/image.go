@@ -18,6 +18,7 @@ var Command = &cli.Command{
 	Subcommands: []*cli.Command{
 		packCommand,
 		browseCommand,
+		bomCommand,
 		scanCommand,
 		lintCommand,
 		analyzeCommand,

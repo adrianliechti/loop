@@ -6,6 +6,7 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/to"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -32,13 +33,17 @@ var httpCommand = &cli.Command{
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		name := app.Name(c)
-		namespace := app.NamespaceOrDefault(c)
+		name := to.String(app.Name(c))
+		namespace := app.Namespace(c)
+
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
 
 		host := c.String("host")
 		port := app.MustPort(c)
 
-		return createHTTPTunnel(c.Context, client, namespace, name, host, port)
+		return createHTTPTunnel(c.Context, client, *namespace, name, host, port)
 	},
 }
 

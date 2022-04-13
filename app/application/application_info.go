@@ -11,6 +11,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/kubernetes/resource"
+	"github.com/adrianliechti/loop/pkg/to"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,10 +34,14 @@ var infoCommand = &cli.Command{
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		name := app.Name(c)
+		name := app.MustName(c)
 		namespace := app.Namespace(c)
 
-		return applicationInfo(c.Context, client, namespace, name)
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
+
+		return applicationInfo(c.Context, client, *namespace, name)
 	},
 }
 

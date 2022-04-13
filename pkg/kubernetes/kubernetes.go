@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -17,6 +18,7 @@ type Client interface {
 
 	ConfigPath() string
 	Config() *rest.Config
+	Namespace() string
 
 	ServicePods(ctx context.Context, namespace, name string) ([]corev1.Pod, error)
 	ServicePod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
@@ -38,17 +40,31 @@ func New() (Client, error) {
 
 func NewFromConfig(path string) (Client, error) {
 	if path == "" {
-		path = os.Getenv("KUBECONFIG")
-
-		if home, err := os.UserHomeDir(); err == nil {
-			path = filepath.Join(home, ".kube", "config")
-		}
+		path = ConfigPath()
 	}
 
-	c, err := clientcmd.BuildConfigFromFlags("", path)
+	data, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		return nil, err
+	}
+
+	config, err := clientcmd.NewClientConfigFromBytes(data)
+
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := config.ClientConfig()
+
+	if err != nil {
+		return nil, err
+	}
+
+	ns, _, _ := config.Namespace()
+
+	if ns == "" {
+		ns = "default"
 	}
 
 	cs, err := kubernetes.NewForConfig(c)
@@ -58,8 +74,9 @@ func NewFromConfig(path string) (Client, error) {
 	}
 
 	client := &client{
-		path:   path,
-		config: c,
+		path:      path,
+		config:    c,
+		namespace: ns,
 
 		Interface: cs,
 	}
@@ -70,8 +87,23 @@ func NewFromConfig(path string) (Client, error) {
 type client struct {
 	kubernetes.Interface
 
-	path   string
-	config *rest.Config
+	path      string
+	config    *rest.Config
+	namespace string
+}
+
+func ConfigPath() string {
+	path := os.Getenv("KUBECONFIG")
+
+	if len(path) > 0 {
+		return path
+	}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".kube", "config")
+	}
+
+	return ""
 }
 
 func (c *client) ConfigPath() string {
@@ -80,6 +112,10 @@ func (c *client) ConfigPath() string {
 
 func (c *client) Config() *rest.Config {
 	return c.config
+}
+
+func (c *client) Namespace() string {
+	return c.namespace
 }
 
 func (c *client) ExportConfig(path string) error {

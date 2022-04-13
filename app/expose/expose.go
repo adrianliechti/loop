@@ -61,10 +61,6 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 		name = "loop-tunnel-" + uuid.New().String()[0:7]
 	}
 
-	if namespace == "" {
-		namespace = "default"
-	}
-
 	labels := tunnelLabels(name)
 	selector := tunnelSelector(name)
 

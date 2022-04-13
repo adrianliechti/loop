@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -30,15 +29,13 @@ var importCommand = &cli.Command{
 	},
 
 	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
-
 		path := c.Path("filename")
 
-		return importConfig(c.Context, client, path)
+		return importConfig(c.Context, path)
 	},
 }
 
-func importConfig(ctx context.Context, client kubernetes.Client, path string) error {
+func importConfig(ctx context.Context, path string) error {
 	kubectl, _, err := kubectl.Tool(ctx)
 
 	if err != nil {
@@ -49,7 +46,7 @@ func importConfig(ctx context.Context, client kubernetes.Client, path string) er
 		path,
 	}
 
-	kubeconfig := client.ConfigPath()
+	kubeconfig := kubernetes.ConfigPath()
 
 	if _, err := os.Stat(kubeconfig); err == nil {
 		files = append(files, kubeconfig)

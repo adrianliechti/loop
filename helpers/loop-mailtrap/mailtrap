@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+if $(id 1000 > /dev/null 2>&1);
+  then
+    echo "User 1000 already exists - $(getent passwd 1000 | awk -F ':' '{print $1}'), skipping creation."
+  else
+    useradd -u 1000 -m -s /bin/bash $USERNAME && echo "$USERNAME:$PASSWORD" | chpasswd
+    postmap /etc/postfix/transport
+fi
+
+service rsyslog start
+service postfix start
+service dovecot start
+service apache2 start
+
+tail -f /var/log/apache2/error.log -f /var/log/mail.log
