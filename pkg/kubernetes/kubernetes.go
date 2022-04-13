@@ -40,11 +40,7 @@ func New() (Client, error) {
 
 func NewFromConfig(path string) (Client, error) {
 	if path == "" {
-		path = os.Getenv("KUBECONFIG")
-
-		if home, err := os.UserHomeDir(); err == nil {
-			path = filepath.Join(home, ".kube", "config")
-		}
+		path = ConfigPath()
 	}
 
 	data, err := ioutil.ReadFile(path)
@@ -94,6 +90,20 @@ type client struct {
 	path      string
 	config    *rest.Config
 	namespace string
+}
+
+func ConfigPath() string {
+	path := os.Getenv("KUBECONFIG")
+
+	if len(path) > 0 {
+		return path
+	}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".kube", "config")
+	}
+
+	return ""
 }
 
 func (c *client) ConfigPath() string {
