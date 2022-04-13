@@ -58,7 +58,7 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port int) error
 		},
 	}
 
-	image := "kubernetesui/dashboard:v2.4.0"
+	image := "kubernetesui/dashboard:v2.5.1"
 
 	if err := docker.Pull(ctx, image); err != nil {
 		return err
