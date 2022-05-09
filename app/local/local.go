@@ -30,6 +30,7 @@ var Command = &cli.Command{
 		natsCommand,
 		rabbitmqCommand,
 
+		registryCommand,
 		mailtrapCommand,
 
 		codeCommand,
