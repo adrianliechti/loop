@@ -9,6 +9,7 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/catapult"
+	"github.com/adrianliechti/loop/app/cluster"
 	"github.com/adrianliechti/loop/app/config"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
@@ -49,6 +50,8 @@ func initApp() cli.App {
 
 		Commands: []*cli.Command{
 			// Cluster
+			cluster.Command,
+
 			application.Command,
 			config.Command,
 			connect.Command,

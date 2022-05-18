@@ -80,6 +80,30 @@ func version(ctx context.Context, path string) (*semver.Version, error) {
 	return semver.NewVersion(version.ClientVersion.GitVersion)
 }
 
+func Invoke(ctx context.Context, kubeconfig string, arg ...string) error {
+	tool, _, err := Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	env := os.Environ()
+
+	if kubeconfig != "" {
+		env = append(env,
+			"KUBECONFIG="+kubeconfig,
+		)
+	}
+
+	cmd := exec.CommandContext(ctx, tool, arg...)
+	cmd.Env = env
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
 func Exec(ctx context.Context, kubeconfig, namespace, name, container string, path string, arg ...string) error {
 	tool, _, err := Tool(ctx)
 
