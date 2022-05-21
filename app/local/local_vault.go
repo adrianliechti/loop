@@ -41,7 +41,6 @@ func createVault() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-
 			image := "vault:latest"
 
 			target := 8200

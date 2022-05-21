@@ -42,7 +42,6 @@ func createPostgreSQL() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-
 			image := "postgres:14-bullseye"
 
 			target := 5432
@@ -50,7 +49,6 @@ func createPostgreSQL() *cli.Command {
 
 			database := "postgres"
 			username := "postgres"
-
 			password, err := password.Generate(10, 4, 0, false, false)
 
 			if err != nil {

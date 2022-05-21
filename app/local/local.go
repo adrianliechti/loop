@@ -23,7 +23,7 @@ var Command = &cli.Command{
 		// mongoDBCommand,
 		// mssqlCommand,
 
-		// etcdCommand,
+		etcdCommand,
 		redisCommand,
 		// influxdbCommand,
 		// elasticsearchCommand,
@@ -32,6 +32,7 @@ var Command = &cli.Command{
 		vaultCommand,
 
 		natsCommand,
+		// kafkaCommand,
 		// rabbitmqCommand,
 
 		// registryCommand,
