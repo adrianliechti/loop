@@ -15,7 +15,15 @@ import (
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/git"
 	"github.com/adrianliechti/loop/app/image"
-	"github.com/adrianliechti/loop/app/local"
+	"github.com/adrianliechti/loop/app/local/etcd"
+	"github.com/adrianliechti/loop/app/local/influxdb"
+	"github.com/adrianliechti/loop/app/local/mariadb"
+	"github.com/adrianliechti/loop/app/local/minio"
+	"github.com/adrianliechti/loop/app/local/mssql"
+	"github.com/adrianliechti/loop/app/local/nats"
+	"github.com/adrianliechti/loop/app/local/postgres"
+	"github.com/adrianliechti/loop/app/local/redis"
+	"github.com/adrianliechti/loop/app/local/vault"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/app/template"
 	"github.com/adrianliechti/loop/app/tool"
@@ -56,7 +64,40 @@ func initApp() cli.App {
 			dashboard.Command,
 
 			// Development
-			local.Command,
+			{
+				Name:  "local",
+				Usage: "local development instances",
+
+				Category: app.CategoryDevelopment,
+
+				HideHelpCommand: true,
+
+				Subcommands: []*cli.Command{
+					mariadb.Command,
+					postgres.Command,
+					// mongoDBCommand,
+					mssql.Command,
+
+					etcd.Command,
+					redis.Command,
+					influxdb.Command,
+					// elasticsearchCommand,
+
+					minio.Command,
+					vault.Command,
+
+					nats.Command,
+					// kafkaCommand,
+					// rabbitmqCommand,
+
+					// registryCommand,
+					// mailtrapCommand,
+
+					// codeCommand,
+					// grafanaCommand,
+					// jupyterCommand,
+				},
+			},
 			remote.Command,
 			expose.Command,
 

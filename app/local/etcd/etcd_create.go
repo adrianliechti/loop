@@ -1,35 +1,15 @@
-package local
+package etcd
 
 import (
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 )
 
-const (
-	ETCD = "etcd"
-)
-
-var etcdCommand = &cli.Command{
-	Name:  "etcd",
-	Usage: "local etcd server",
-
-	HideHelpCommand: true,
-
-	Subcommands: []*cli.Command{
-		listCommand(ETCD),
-
-		createETCD(),
-		deleteCommand(ETCD),
-
-		logsCommand(ETCD),
-		shellCommand(ETCD, "/bin/ash"),
-	},
-}
-
-func createETCD() *cli.Command {
+func CreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "create",
 		Usage: "create instance",
@@ -49,7 +29,7 @@ func createETCD() *cli.Command {
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					KindKey: ETCD,
+					local.KindKey: ETCD,
 				},
 
 				Env: map[string]string{

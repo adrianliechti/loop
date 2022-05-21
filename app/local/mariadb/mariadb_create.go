@@ -1,35 +1,17 @@
-package local
+package mariadb
 
 import (
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+
 	"github.com/sethvargo/go-password/password"
 )
 
-const (
-	NATS = "nats"
-)
-
-var natsCommand = &cli.Command{
-	Name:  NATS,
-	Usage: "local NATS server",
-
-	HideHelpCommand: true,
-
-	Subcommands: []*cli.Command{
-		listCommand(NATS),
-
-		createNATS(),
-		deleteCommand(NATS),
-
-		logsCommand(NATS),
-	},
-}
-
-func createNATS() *cli.Command {
+func CreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "create",
 		Usage: "create instance",
@@ -40,12 +22,13 @@ func createNATS() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			image := "nats:2-linux"
+			image := "mariadb:10-focal"
 
-			target := 4222
+			target := 3306
 			port := app.MustPortOrRandom(c, target)
 
-			username := "admin"
+			database := "db"
+			username := "root"
 			password, err := password.Generate(10, 4, 0, false, false)
 
 			if err != nil {
@@ -54,36 +37,33 @@ func createNATS() *cli.Command {
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					KindKey: NATS,
+					local.KindKey: MariaDB,
 				},
 
 				Env: map[string]string{
-					"USERNAME": username,
-					"PASSWORD": password,
+					"MARIADB_DATABASE":      database,
+					"MARIADB_ROOT_PASSWORD": password,
 				},
 
 				Ports: map[int]int{
 					port: target,
 				},
+
+				// Volumes: map[string]string{
+				// 	name: "/var/lib/mysql",
+				// },
 			}
 
-			args := []string{
-				"-js",
-				"--name", "default",
-				"--cluster_name", "default",
-				"--user", username,
-				"--pass", password,
-			}
-
-			if err := docker.Run(ctx, image, options, args...); err != nil {
+			if err := docker.Run(ctx, image, options); err != nil {
 				return err
 			}
 
 			cli.Table([]string{"Name", "Value"}, [][]string{
 				{"Host", fmt.Sprintf("localhost:%d", port)},
+				{"database", database},
 				{"Username", username},
 				{"Password", password},
-				{"URL", fmt.Sprintf("nats://%s:%s@localhost:%d", username, password, port)},
+				{"URL", fmt.Sprintf("mariadb://%s:%s@localhost:%d/%s", username, password, port, database)},
 			})
 
 			return nil

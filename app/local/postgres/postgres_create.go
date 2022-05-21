@@ -1,37 +1,17 @@
-package local
+package postgres
 
 import (
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+
 	"github.com/sethvargo/go-password/password"
 )
 
-const (
-	PostgreSQL = "postgres"
-)
-
-var postgresCommand = &cli.Command{
-	Name:  PostgreSQL,
-	Usage: "local PostgreSQL server",
-
-	HideHelpCommand: true,
-
-	Subcommands: []*cli.Command{
-		listCommand(PostgreSQL),
-
-		createPostgreSQL(),
-		deleteCommand(PostgreSQL),
-
-		logsCommand(PostgreSQL),
-		shellCommand(PostgreSQL, "/bin/bash"),
-		clientPostgreSQL(),
-	},
-}
-
-func createPostgreSQL() *cli.Command {
+func CreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "create",
 		Usage: "create instance",
@@ -57,7 +37,7 @@ func createPostgreSQL() *cli.Command {
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					KindKey: PostgreSQL,
+					local.KindKey: PostgreSQL,
 				},
 
 				Env: map[string]string{
@@ -88,27 +68,6 @@ func createPostgreSQL() *cli.Command {
 			})
 
 			return nil
-		},
-	}
-}
-
-func clientPostgreSQL() *cli.Command {
-	return &cli.Command{
-		Name:  "cli",
-		Usage: "run psql in instance",
-
-		Action: func(c *cli.Context) error {
-			ctx := c.Context
-			container := mustContainer(ctx, PostgreSQL)
-
-			options := docker.ExecOptions{
-				User: "postgres",
-			}
-
-			return docker.ExecInteractive(ctx, container, options,
-				"/bin/bash", "-c",
-				"psql --username ${POSTGRES_USER} --dbname ${POSTGRES_DB}",
-			)
 		},
 	}
 }

@@ -1,36 +1,17 @@
-package local
+package redis
 
 import (
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+
 	"github.com/sethvargo/go-password/password"
 )
 
-const (
-	Vault = "vault"
-)
-
-var vaultCommand = &cli.Command{
-	Name:  Vault,
-	Usage: "local Vault server",
-
-	HideHelpCommand: true,
-
-	Subcommands: []*cli.Command{
-		listCommand(Vault),
-
-		createVault(),
-		deleteCommand(Vault),
-
-		logsCommand(Vault),
-		shellCommand(Vault, "/bin/ash"),
-	},
-}
-
-func createVault() *cli.Command {
+func CreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "create",
 		Usage: "create instance",
@@ -41,12 +22,12 @@ func createVault() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			image := "vault:latest"
+			image := "redis:6-bullseye"
 
-			target := 8200
+			target := 6379
 			port := app.MustPortOrRandom(c, target)
 
-			token, err := password.Generate(10, 4, 0, false, false)
+			password, err := password.Generate(10, 4, 0, false, false)
 
 			if err != nil {
 				return err
@@ -54,16 +35,20 @@ func createVault() *cli.Command {
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					KindKey: Vault,
+					local.KindKey: Redis,
 				},
 
 				Env: map[string]string{
-					"VAULT_DEV_ROOT_TOKEN_ID": token,
+					"REDIS_PASSWORD": password,
 				},
 
 				Ports: map[int]int{
 					port: target,
 				},
+
+				// Volumes: map[string]string{
+				// 	name: "/data",
+				// },
 			}
 
 			if err := docker.Run(ctx, image, options); err != nil {
@@ -72,8 +57,8 @@ func createVault() *cli.Command {
 
 			cli.Table([]string{"Name", "Value"}, [][]string{
 				{"Host", fmt.Sprintf("localhost:%d", port)},
-				{"Token", token},
-				{"URL", fmt.Sprintf("http://localhost:%d", port)},
+				{"Password", password},
+				{"URL", fmt.Sprintf("redis://:%s@localhost:%d", password, port)},
 			})
 
 			return nil
