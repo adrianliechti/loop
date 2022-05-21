@@ -15,9 +15,7 @@ func ClientCommand() *cli.Command {
 			ctx := c.Context
 			container := local.MustContainer(ctx, PostgreSQL)
 
-			options := docker.ExecOptions{
-				User: "postgres",
-			}
+			options := docker.ExecOptions{}
 
 			return docker.ExecInteractive(ctx, container, options,
 				"/bin/bash", "-c",

@@ -27,11 +27,7 @@ func CreateCommand() *cli.Command {
 			target := 6379
 			port := app.MustPortOrRandom(c, target)
 
-			password, err := password.Generate(10, 4, 0, false, false)
-
-			if err != nil {
-				return err
-			}
+			password := password.MustGenerate(10, 4, 0, false, false)
 
 			options := docker.RunOptions{
 				Labels: map[string]string{

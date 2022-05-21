@@ -1,4 +1,4 @@
-package mariadb
+package mongodb
 
 import (
 	"fmt"
@@ -22,9 +22,9 @@ func CreateCommand() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			image := "mariadb:10-focal"
+			image := "mongo:5-focal"
 
-			target := 3306
+			target := 27017
 			port := app.MustPortOrRandom(c, target)
 
 			database := "db"
@@ -33,12 +33,13 @@ func CreateCommand() *cli.Command {
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					local.KindKey: MariaDB,
+					local.KindKey: MongoDB,
 				},
 
 				Env: map[string]string{
-					"MARIADB_DATABASE":      database,
-					"MARIADB_ROOT_PASSWORD": password,
+					"MONGO_INITDB_DATABASE":      database,
+					"MONGO_INITDB_ROOT_USERNAME": username,
+					"MONGO_INITDB_ROOT_PASSWORD": password,
 				},
 
 				Ports: map[int]int{
@@ -46,7 +47,7 @@ func CreateCommand() *cli.Command {
 				},
 
 				// Volumes: map[string]string{
-				// 	name: "/var/lib/mysql",
+				// 	name: "/data/db",
 				// },
 			}
 
@@ -59,7 +60,7 @@ func CreateCommand() *cli.Command {
 				{"database", database},
 				{"Username", username},
 				{"Password", password},
-				{"URL", fmt.Sprintf("mariadb://%s:%s@localhost:%d/%s", username, password, port, database)},
+				{"URL", fmt.Sprintf("mongodb://%s:%s@localhost:%d/%s", username, password, port, database)},
 			})
 
 			return nil

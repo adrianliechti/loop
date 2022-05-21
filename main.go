@@ -15,10 +15,13 @@ import (
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/git"
 	"github.com/adrianliechti/loop/app/image"
+	"github.com/adrianliechti/loop/app/local/elasticsearch"
 	"github.com/adrianliechti/loop/app/local/etcd"
 	"github.com/adrianliechti/loop/app/local/influxdb"
+	"github.com/adrianliechti/loop/app/local/kafka"
 	"github.com/adrianliechti/loop/app/local/mariadb"
 	"github.com/adrianliechti/loop/app/local/minio"
+	"github.com/adrianliechti/loop/app/local/mongodb"
 	"github.com/adrianliechti/loop/app/local/mssql"
 	"github.com/adrianliechti/loop/app/local/nats"
 	"github.com/adrianliechti/loop/app/local/postgres"
@@ -75,19 +78,19 @@ func initApp() cli.App {
 				Subcommands: []*cli.Command{
 					mariadb.Command,
 					postgres.Command,
-					// mongoDBCommand,
+					mongodb.Command,
 					mssql.Command,
 
 					etcd.Command,
 					redis.Command,
 					influxdb.Command,
-					// elasticsearchCommand,
+					elasticsearch.Command,
 
 					minio.Command,
 					vault.Command,
 
 					nats.Command,
-					// kafkaCommand,
+					kafka.Command,
 					// rabbitmqCommand,
 
 					// registryCommand,

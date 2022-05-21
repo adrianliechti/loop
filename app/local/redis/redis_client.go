@@ -15,9 +15,7 @@ func ClientCommand() *cli.Command {
 			ctx := c.Context
 			container := local.MustContainer(ctx, Redis)
 
-			options := docker.ExecOptions{
-				User: "redis",
-			}
+			options := docker.ExecOptions{}
 
 			return docker.ExecInteractive(ctx, container, options,
 				"/bin/bash", "-c",

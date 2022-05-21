@@ -1,4 +1,4 @@
-package etcd
+package kafka
 
 import (
 	"github.com/adrianliechti/loop/app/local"
@@ -6,22 +6,22 @@ import (
 )
 
 const (
-	ETCD = "etcd"
+	Kafka = "kafka"
 )
 
 var Command = &cli.Command{
-	Name:  ETCD,
-	Usage: "local etcd server",
+	Name:  Kafka,
+	Usage: "local Kafka server",
 
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
-		local.ListCommand(ETCD),
+		local.ListCommand(Kafka),
 
 		CreateCommand(),
-		local.DeleteCommand(ETCD),
+		local.DeleteCommand(Kafka),
 
-		local.LogsCommand(ETCD),
-		local.ShellCommand(ETCD, "/bin/ash"),
+		local.LogsCommand(Kafka),
+		local.ShellCommand(Kafka, "/bin/bash"),
 	},
 }

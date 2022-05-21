@@ -103,12 +103,6 @@ func Run(ctx context.Context, image string, options RunOptions, args ...string) 
 		return err
 	}
 
-	pull := exec.CommandContext(ctx, tool, "pull", "--quiet", image)
-
-	if err := pull.Run(); err != nil {
-		return err
-	}
-
 	run := exec.CommandContext(ctx, tool, runArgs(image, options, args...)...)
 	run.Stdin = options.Stdin
 	run.Stdout = options.Stdout

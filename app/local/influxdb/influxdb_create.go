@@ -31,18 +31,8 @@ func CreateCommand() *cli.Command {
 			bucket := "default"
 
 			username := "admin"
-
-			token, err := password.Generate(10, 4, 0, false, false)
-
-			if err != nil {
-				return err
-			}
-
-			password, err := password.Generate(10, 4, 0, false, false)
-
-			if err != nil {
-				return err
-			}
+			token := password.MustGenerate(10, 4, 0, false, false)
+			password := password.MustGenerate(10, 4, 0, false, false)
 
 			options := docker.RunOptions{
 				Labels: map[string]string{

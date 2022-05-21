@@ -1,4 +1,4 @@
-package mariadb
+package mongodb
 
 import (
 	"github.com/adrianliechti/loop/app/local"
@@ -9,17 +9,17 @@ import (
 func ClientCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "cli",
-		Usage: "run mysql in instance",
+		Usage: "run mongo in instance",
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			container := local.MustContainer(ctx, MariaDB)
+			container := local.MustContainer(ctx, MongoDB)
 
 			options := docker.ExecOptions{}
 
 			return docker.ExecInteractive(ctx, container, options,
 				"/bin/bash", "-c",
-				"mysql --user=root --password=${MARIADB_ROOT_PASSWORD} ${MARIADB_DATABASE}",
+				"mongo --quiet --norc --username ${MONGO_INITDB_ROOT_USERNAME} --password ${MONGO_INITDB_ROOT_PASSWORD}",
 			)
 		},
 	}

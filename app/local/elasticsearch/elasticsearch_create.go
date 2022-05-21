@@ -1,4 +1,4 @@
-package mariadb
+package elasticsearch
 
 import (
 	"fmt"
@@ -22,23 +22,28 @@ func CreateCommand() *cli.Command {
 
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
-			image := "mariadb:10-focal"
+			image := "docker.elastic.co/elasticsearch/elasticsearch:8.2.0"
 
-			target := 3306
+			target := 9200
 			port := app.MustPortOrRandom(c, target)
 
-			database := "db"
-			username := "root"
+			username := "elastic"
 			password := password.MustGenerate(10, 4, 0, false, false)
 
 			options := docker.RunOptions{
 				Labels: map[string]string{
-					local.KindKey: MariaDB,
+					local.KindKey: Elasticsearch,
 				},
 
 				Env: map[string]string{
-					"MARIADB_DATABASE":      database,
-					"MARIADB_ROOT_PASSWORD": password,
+					"node.name": "es",
+
+					"cluster.name":   "default",
+					"discovery.type": "single-node",
+
+					"xpack.security.enabled": "true",
+
+					"ELASTIC_PASSWORD": password,
 				},
 
 				Ports: map[int]int{
@@ -46,7 +51,7 @@ func CreateCommand() *cli.Command {
 				},
 
 				// Volumes: map[string]string{
-				// 	name: "/var/lib/mysql",
+				// 	name: "/usr/share/elasticsearch/data",
 				// },
 			}
 
@@ -56,10 +61,9 @@ func CreateCommand() *cli.Command {
 
 			cli.Table([]string{"Name", "Value"}, [][]string{
 				{"Host", fmt.Sprintf("localhost:%d", port)},
-				{"database", database},
 				{"Username", username},
 				{"Password", password},
-				{"URL", fmt.Sprintf("mariadb://%s:%s@localhost:%d/%s", username, password, port, database)},
+				{"URL", fmt.Sprintf("http://%s:%s@localhost:%d", username, password, port)},
 			})
 
 			return nil

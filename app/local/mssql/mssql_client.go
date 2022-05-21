@@ -15,9 +15,7 @@ func ClientCommand() *cli.Command {
 			ctx := c.Context
 			container := local.MustContainer(ctx, MSSQL)
 
-			options := docker.ExecOptions{
-				User: "mssql",
-			}
+			options := docker.ExecOptions{}
 
 			return docker.ExecInteractive(ctx, container, options,
 				"/bin/bash", "-c",
