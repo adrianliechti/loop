@@ -1,62 +1,83 @@
 package local
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+	"github.com/sethvargo/go-password/password"
+)
+
+const (
+	Vault = "vault"
 )
 
 var vaultCommand = &cli.Command{
-	Name:  "vault",
+	Name:  Vault,
 	Usage: "local Vault server",
 
-	Flags: []cli.Flag{
-		app.PortFlag,
-	},
+	HideHelpCommand: true,
 
-	Action: func(c *cli.Context) error {
-		port := app.MustPortOrRandom(c, 8200)
-		return startVault(c.Context, port)
+	Subcommands: []*cli.Command{
+		listCommand(Vault),
+
+		createVault(),
+		deleteCommand(Vault),
+
+		logsCommand(Vault),
+		shellCommand(Vault, "/bin/ash"),
 	},
 }
 
-func startVault(ctx context.Context, port int) error {
-	image := "vault:latest"
+func createVault() *cli.Command {
+	return &cli.Command{
+		Name:  "create",
+		Usage: "create instance",
 
-	if err := docker.Pull(ctx, image); err != nil {
-		return err
-	}
-
-	target := 8200
-
-	if port == 0 {
-		port = target
-	}
-
-	token := "notsecure"
-
-	cli.Info()
-
-	cli.Table([]string{"Name", "Value"}, [][]string{
-		{"Host", fmt.Sprintf("localhost:%d", port)},
-		{"Token", token},
-		{"URL", fmt.Sprintf("http://localhost:%d", port)},
-	})
-
-	cli.Info()
-
-	options := docker.RunOptions{
-		Env: map[string]string{
-			"VAULT_DEV_ROOT_TOKEN_ID": token,
+		Flags: []cli.Flag{
+			app.PortFlag,
 		},
 
-		Ports: map[int]int{
-			port: target,
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+
+			image := "vault:latest"
+
+			target := 8200
+			port := app.MustPortOrRandom(c, target)
+
+			token, err := password.Generate(10, 4, 0, false, false)
+
+			if err != nil {
+				return err
+			}
+
+			options := docker.RunOptions{
+				Labels: map[string]string{
+					KindKey: Vault,
+				},
+
+				Env: map[string]string{
+					"VAULT_DEV_ROOT_TOKEN_ID": token,
+				},
+
+				Ports: map[int]int{
+					port: target,
+				},
+			}
+
+			if err := docker.Run(ctx, image, options); err != nil {
+				return err
+			}
+
+			cli.Table([]string{"Name", "Value"}, [][]string{
+				{"Host", fmt.Sprintf("localhost:%d", port)},
+				{"Token", token},
+				{"URL", fmt.Sprintf("http://localhost:%d", port)},
+			})
+
+			return nil
 		},
 	}
-
-	return docker.RunInteractive(ctx, image, options)
 }

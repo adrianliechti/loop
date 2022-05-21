@@ -1,72 +1,116 @@
 package local
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+	"github.com/sethvargo/go-password/password"
+)
+
+const (
+	PostgreSQL = "postgres"
 )
 
 var postgresCommand = &cli.Command{
-	Name:  "postgres",
+	Name:  PostgreSQL,
 	Usage: "local PostgreSQL server",
 
-	Flags: []cli.Flag{
-		app.PortFlag,
-	},
+	HideHelpCommand: true,
 
-	Action: func(c *cli.Context) error {
-		port := app.MustPortOrRandom(c, 5432)
-		return startPostgreSQL(c.Context, port)
+	Subcommands: []*cli.Command{
+		listCommand(PostgreSQL),
+
+		createPostgreSQL(),
+		deleteCommand(PostgreSQL),
+
+		logsCommand(PostgreSQL),
+		shellCommand(PostgreSQL, "/bin/bash"),
+		clientPostgreSQL(),
 	},
 }
 
-func startPostgreSQL(ctx context.Context, port int) error {
-	image := "postgres:14-bullseye"
+func createPostgreSQL() *cli.Command {
+	return &cli.Command{
+		Name:  "create",
+		Usage: "create instance",
 
-	if err := docker.Pull(ctx, image); err != nil {
-		return err
-	}
-
-	target := 5432
-
-	if port == 0 {
-		port = target
-	}
-
-	database := "postgres"
-	username := "postgres"
-	password := "notsecure"
-
-	cli.Info()
-
-	cli.Table([]string{"Name", "Value"}, [][]string{
-		{"Host", fmt.Sprintf("localhost:%d", port)},
-		{"database", database},
-		{"Username", username},
-		{"Password", password},
-		{"URL", fmt.Sprintf("postgresql://%s:%s@localhost:%d/%s", username, password, port, database)},
-	})
-
-	cli.Info()
-
-	options := docker.RunOptions{
-		Env: map[string]string{
-			"POSTGRES_DB":       database,
-			"POSTGRES_USER":     username,
-			"POSTGRES_PASSWORD": password,
+		Flags: []cli.Flag{
+			app.PortFlag,
 		},
 
-		Ports: map[int]int{
-			port: target,
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+
+			image := "postgres:14-bullseye"
+
+			target := 5432
+			port := app.MustPortOrRandom(c, target)
+
+			database := "postgres"
+			username := "postgres"
+
+			password, err := password.Generate(10, 4, 0, false, false)
+
+			if err != nil {
+				return err
+			}
+
+			options := docker.RunOptions{
+				Labels: map[string]string{
+					KindKey: PostgreSQL,
+				},
+
+				Env: map[string]string{
+					"POSTGRES_DB":       database,
+					"POSTGRES_USER":     username,
+					"POSTGRES_PASSWORD": password,
+				},
+
+				Ports: map[int]int{
+					port: target,
+				},
+
+				// Volumes: map[string]string{
+				// 	name: "/var/lib/postgresql/data",
+				// },
+			}
+
+			if err := docker.Run(ctx, image, options); err != nil {
+				return err
+			}
+
+			cli.Table([]string{"Name", "Value"}, [][]string{
+				{"Host", fmt.Sprintf("localhost:%d", port)},
+				{"database", database},
+				{"Username", username},
+				{"Password", password},
+				{"URL", fmt.Sprintf("postgresql://%s:%s@localhost:%d/%s", username, password, port, database)},
+			})
+
+			return nil
 		},
-
-		// Volumes: map[string]string{
-		// 	name: "/var/lib/postgresql/data",
-		// },
 	}
+}
 
-	return docker.RunInteractive(ctx, image, options)
+func clientPostgreSQL() *cli.Command {
+	return &cli.Command{
+		Name:  "cli",
+		Usage: "run psql in instance",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			container := mustContainer(ctx, PostgreSQL)
+
+			options := docker.ExecOptions{
+				User: "postgres",
+			}
+
+			return docker.ExecInteractive(ctx, container, options,
+				"/bin/bash", "-c",
+				"psql --username ${POSTGRES_USER} --dbname ${POSTGRES_DB}",
+			)
+		},
+	}
 }

@@ -1,66 +1,108 @@
 package local
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+	"github.com/sethvargo/go-password/password"
+)
+
+const (
+	Redis = "redis"
 )
 
 var redisCommand = &cli.Command{
-	Name:  "redis",
+	Name:  Redis,
 	Usage: "local Redis server",
 
-	Flags: []cli.Flag{
-		app.PortFlag,
-	},
+	HideHelpCommand: true,
 
-	Action: func(c *cli.Context) error {
-		port := app.MustPortOrRandom(c, 6379)
-		return startRedis(c.Context, port)
+	Subcommands: []*cli.Command{
+		listCommand(Redis),
+
+		createRedis(),
+		deleteCommand(Redis),
+
+		logsCommand(Redis),
+		shellCommand(Redis, "/bin/bash"),
+		clientRedis(),
 	},
 }
 
-func startRedis(ctx context.Context, port int) error {
-	image := "redis:6-bullseye"
+func createRedis() *cli.Command {
+	return &cli.Command{
+		Name:  "create",
+		Usage: "create instance",
 
-	if err := docker.Pull(ctx, image); err != nil {
-		return err
-	}
-
-	target := 6379
-
-	if port == 0 {
-		port = target
-	}
-
-	password := "notsecure"
-
-	cli.Info()
-
-	cli.Table([]string{"Name", "Value"}, [][]string{
-		{"Host", fmt.Sprintf("localhost:%d", port)},
-		{"Password", password},
-		{"URL", fmt.Sprintf("redis://:%s@localhost:%d", password, port)},
-	})
-
-	cli.Info()
-
-	options := docker.RunOptions{
-		Env: map[string]string{
-			"REDIS_PASSWORD": password,
+		Flags: []cli.Flag{
+			app.PortFlag,
 		},
 
-		Ports: map[int]int{
-			port: target,
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			image := "redis:6-bullseye"
+
+			target := 6379
+			port := app.MustPortOrRandom(c, target)
+
+			password, err := password.Generate(10, 4, 0, false, false)
+
+			if err != nil {
+				return err
+			}
+
+			options := docker.RunOptions{
+				Labels: map[string]string{
+					KindKey: Redis,
+				},
+
+				Env: map[string]string{
+					"REDIS_PASSWORD": password,
+				},
+
+				Ports: map[int]int{
+					port: target,
+				},
+
+				// Volumes: map[string]string{
+				// 	name: "/data",
+				// },
+			}
+
+			if err := docker.Run(ctx, image, options); err != nil {
+				return err
+			}
+
+			cli.Table([]string{"Name", "Value"}, [][]string{
+				{"Host", fmt.Sprintf("localhost:%d", port)},
+				{"Password", password},
+				{"URL", fmt.Sprintf("redis://:%s@localhost:%d", password, port)},
+			})
+
+			return nil
 		},
-
-		// Volumes: map[string]string{
-		// 	name: "/data",
-		// },
 	}
+}
 
-	return docker.RunInteractive(ctx, image, options)
+func clientRedis() *cli.Command {
+	return &cli.Command{
+		Name:  "cli",
+		Usage: "run redis-cli in instance",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			container := mustContainer(ctx, Redis)
+
+			options := docker.ExecOptions{
+				User: "redis",
+			}
+
+			return docker.ExecInteractive(ctx, container, options,
+				"/bin/bash", "-c",
+				"redis-cli",
+			)
+		},
+	}
 }

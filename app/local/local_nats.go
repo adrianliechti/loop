@@ -1,73 +1,93 @@
 package local
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
+	"github.com/sethvargo/go-password/password"
+)
+
+const (
+	NATS = "nats"
 )
 
 var natsCommand = &cli.Command{
-	Name:  "nats",
+	Name:  NATS,
 	Usage: "local NATS server",
 
-	Flags: []cli.Flag{
-		app.PortFlag,
-	},
+	HideHelpCommand: true,
 
-	Action: func(c *cli.Context) error {
-		port := app.MustPortOrRandom(c, 4222)
-		return startNATS(c.Context, port)
+	Subcommands: []*cli.Command{
+		listCommand(NATS),
+
+		createNATS(),
+		deleteCommand(NATS),
+
+		logsCommand(NATS),
 	},
 }
 
-func startNATS(ctx context.Context, port int) error {
-	image := "nats:2-linux"
+func createNATS() *cli.Command {
+	return &cli.Command{
+		Name:  "create",
+		Usage: "create instance",
 
-	if err := docker.Pull(ctx, image); err != nil {
-		return err
-	}
-
-	target := 4222
-
-	if port == 0 {
-		port = target
-	}
-
-	username := "admin"
-	password := "notsecure"
-
-	cli.Info()
-
-	cli.Table([]string{"Name", "Value"}, [][]string{
-		{"Host", fmt.Sprintf("localhost:%d", port)},
-		{"Username", username},
-		{"Password", password},
-		{"URL", fmt.Sprintf("nats://%s:%s@localhost:%d", username, password, port)},
-	})
-
-	cli.Info()
-
-	options := docker.RunOptions{
-		Env: map[string]string{
-			"USERNAME": username,
-			"PASSWORD": password,
+		Flags: []cli.Flag{
+			app.PortFlag,
 		},
 
-		Ports: map[int]int{
-			port: target,
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			image := "nats:2-linux"
+
+			target := 4222
+			port := app.MustPortOrRandom(c, target)
+
+			username := "admin"
+
+			password, err := password.Generate(10, 4, 0, false, false)
+
+			if err != nil {
+				return err
+			}
+
+			options := docker.RunOptions{
+				Labels: map[string]string{
+					KindKey: NATS,
+				},
+
+				Env: map[string]string{
+					"USERNAME": username,
+					"PASSWORD": password,
+				},
+
+				Ports: map[int]int{
+					port: target,
+				},
+			}
+
+			args := []string{
+				"-js",
+				"--name", "default",
+				"--cluster_name", "default",
+				"--user", username,
+				"--pass", password,
+			}
+
+			if err := docker.Run(ctx, image, options, args...); err != nil {
+				return err
+			}
+
+			cli.Table([]string{"Name", "Value"}, [][]string{
+				{"Host", fmt.Sprintf("localhost:%d", port)},
+				{"Username", username},
+				{"Password", password},
+				{"URL", fmt.Sprintf("nats://%s:%s@localhost:%d", username, password, port)},
+			})
+
+			return nil
 		},
 	}
-
-	args := []string{
-		"-js",
-		"--name", "default",
-		"--cluster_name", "default",
-		"--user", username,
-		"--pass", password,
-	}
-
-	return docker.RunInteractive(ctx, image, options, args...)
 }
