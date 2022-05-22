@@ -1,40 +1,133 @@
 package local
 
 import (
-	"github.com/adrianliechti/loop/app"
+	"context"
+	"errors"
+
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/docker"
 )
 
-var Command = &cli.Command{
-	Name:  "local",
-	Usage: "local development servers",
+const (
+	KindKey = "local.loop.kind"
+)
 
-	Category: app.CategoryDevelopment,
+func SelectContainer(ctx context.Context, kind string) (string, error) {
+	list, err := docker.List(ctx, docker.ListOptions{
+		All: true,
 
-	HideHelpCommand: true,
+		Filter: []string{
+			"label=" + KindKey + "=" + kind,
+		},
+	})
 
-	Subcommands: []*cli.Command{
-		mariadbCommand,
-		postgresCommand,
-		mongoDBCommand,
-		mssqlCommand,
+	var items []string
 
-		etcdCommand,
-		redisCommand,
-		influxdbCommand,
-		elasticsearchCommand,
+	if err != nil {
+		return "", err
+	}
 
-		minioCommand,
-		vaultCommand,
+	for _, c := range list {
+		name := c.Names[0]
+		items = append(items, name)
+	}
 
-		natsCommand,
-		rabbitmqCommand,
+	if len(items) == 0 {
+		return "", errors.New("no instances found")
+	}
 
-		registryCommand,
-		mailtrapCommand,
+	i, _, err := cli.Select("Select instance", items)
 
-		codeCommand,
-		grafanaCommand,
-		jupyterCommand,
-	},
+	if err != nil {
+		return "", err
+	}
+
+	return list[i].ID, nil
+}
+
+func MustContainer(ctx context.Context, kind string) string {
+	container, err := SelectContainer(ctx, kind)
+
+	if err != nil {
+		cli.Fatal(err)
+	}
+
+	return container
+}
+
+func ListCommand(kind string) *cli.Command {
+	return &cli.Command{
+		Name:  "list",
+		Usage: "list instances",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+
+			list, err := docker.List(ctx, docker.ListOptions{
+				All: true,
+
+				Filter: []string{
+					"label=" + KindKey + "=" + kind,
+				},
+			})
+
+			if err != nil {
+				return err
+			}
+
+			for _, c := range list {
+				name := c.Names[0]
+				cli.Info(name)
+			}
+
+			return nil
+		},
+	}
+}
+
+func DeleteCommand(kind string) *cli.Command {
+	return &cli.Command{
+		Name:  "delete",
+		Usage: "delete instance",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			container := MustContainer(ctx, kind)
+
+			return docker.Delete(ctx, container, docker.DeleteOptions{
+				Force:   true,
+				Volumes: true,
+			})
+		},
+	}
+}
+
+func LogsCommand(kind string) *cli.Command {
+	return &cli.Command{
+		Name:  "logs",
+		Usage: "show instance logs",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			container := MustContainer(ctx, kind)
+
+			return docker.Logs(ctx, container, docker.LogsOptions{
+				Follow: true,
+			})
+		},
+	}
+}
+
+func ShellCommand(kind, shell string, arg ...string) *cli.Command {
+	return &cli.Command{
+		Name:  "shell",
+		Usage: "run shell in instance (" + shell + ")",
+
+		Action: func(c *cli.Context) error {
+			ctx := c.Context
+			container := MustContainer(ctx, kind)
+
+			return docker.ExecInteractive(ctx, container, docker.ExecOptions{}, shell, arg...)
+		},
+	}
 }
