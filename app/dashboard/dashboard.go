@@ -15,8 +15,6 @@ var Command = &cli.Command{
 	Name:  "dashboard",
 	Usage: "start Kubernetes Dashboard",
 
-	Category: app.CategoryCluster,
-
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  app.PortFlag.Name,

@@ -10,8 +10,6 @@ var Command = &cli.Command{
 	Name:  "connect",
 	Usage: "connect Kubernetes network",
 
-	Category: app.CategoryCluster,
-
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
 	},
