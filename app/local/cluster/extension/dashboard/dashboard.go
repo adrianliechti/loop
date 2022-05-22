@@ -16,6 +16,8 @@ var (
 
 	Images = []string{
 		"kubernetesui/dashboard:v2.5.1",
+		"kubernetesui/metrics-scraper:v1.0.7",
+		"k8s.gcr.io/metrics-server/metrics-server:v0.5.0",
 	}
 )
 
@@ -40,11 +42,15 @@ func Install(ctx context.Context, kubeconfig, namespace string) error {
 		},
 
 		"metricsScraper": map[string]any{
-			"enabled": false,
+			"enabled": true,
 		},
 
 		"metrics-server": map[string]any{
-			"enabled": false,
+			"enabled": true,
+			"args": []string{
+				"--kubelet-insecure-tls",
+				"--kubelet-preferred-address-types=InternalIP",
+			},
 		},
 	}
 

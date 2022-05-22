@@ -76,7 +76,7 @@ func Install(ctx context.Context, kubeconfig, namespace, release, repo, chart, v
 	}
 
 	args := []string{
-		"upgrade", "--install",
+		"upgrade", "--install", "--create-namespace",
 		release,
 		chart,
 	}

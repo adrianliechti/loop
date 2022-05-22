@@ -1,6 +1,8 @@
 package kind
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -66,6 +68,36 @@ func version(ctx context.Context, path string) (*semver.Version, error) {
 	return semver.NewVersion(lines[0])
 }
 
+func List(ctx context.Context) ([]string, error) {
+	var list []string
+
+	tool, _, err := Tool(ctx)
+
+	if err != nil {
+		return list, err
+	}
+
+	args := []string{
+		"get", "clusters",
+	}
+
+	cmd := exec.CommandContext(ctx, tool, args...)
+	data, err := cmd.Output()
+
+	if err != nil {
+		return list, err
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+
+	for scanner.Scan() {
+		name := scanner.Text()
+		list = append(list, name)
+	}
+
+	return list, nil
+}
+
 func Create(ctx context.Context, name string) error {
 	tool, _, err := Tool(ctx)
 
@@ -107,6 +139,21 @@ func Delete(ctx context.Context, name string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	return cmd.Run()
+}
+
+func Kubeconfig(ctx context.Context, name, path string) error {
+	tool, _, err := Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		"export", "kubeconfig", "--name", name, "--kubeconfig", path,
+	}
+
+	cmd := exec.CommandContext(ctx, tool, args...)
 	return cmd.Run()
 }
 

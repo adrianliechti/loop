@@ -9,13 +9,13 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/catapult"
-	"github.com/adrianliechti/loop/app/cluster"
 	"github.com/adrianliechti/loop/app/config"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/git"
 	"github.com/adrianliechti/loop/app/image"
+	"github.com/adrianliechti/loop/app/local/cluster"
 	"github.com/adrianliechti/loop/app/local/elasticsearch"
 	"github.com/adrianliechti/loop/app/local/etcd"
 	"github.com/adrianliechti/loop/app/local/influxdb"
@@ -79,6 +79,8 @@ func initApp() cli.App {
 				HideHelpCommand: true,
 
 				Subcommands: []*cli.Command{
+					cluster.Command,
+
 					mariadb.Command,
 					postgres.Command,
 					mongodb.Command,
