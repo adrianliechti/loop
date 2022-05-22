@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  MinIO,
 	Usage: "local MinIO server",
 
+	Category: local.CategoryStorage,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

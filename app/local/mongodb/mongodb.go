@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  MongoDB,
 	Usage: "local MongoDB server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

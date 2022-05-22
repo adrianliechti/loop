@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  InfluxDB,
 	Usage: "local InfluxDB server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

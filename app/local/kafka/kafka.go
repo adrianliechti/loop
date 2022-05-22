@@ -11,7 +11,9 @@ const (
 
 var Command = &cli.Command{
 	Name:  Kafka,
-	Usage: "local Kafka server",
+	Usage: "local Kafka broker",
+
+	Category: local.CategoryMessaging,
 
 	HideHelpCommand: true,
 

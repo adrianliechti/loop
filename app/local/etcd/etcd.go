@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  ETCD,
 	Usage: "local etcd server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

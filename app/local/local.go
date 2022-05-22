@@ -10,6 +10,11 @@ import (
 
 const (
 	KindKey = "local.loop.kind"
+
+	CategoryCluster   = "CLUSTER"
+	CategoryDatabase  = "DATABASE"
+	CategoryMessaging = "MESSAGING"
+	CategoryStorage   = "STORAGE"
 )
 
 func SelectContainer(ctx context.Context, kind string) (string, error) {

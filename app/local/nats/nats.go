@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  NATS,
 	Usage: "local NATS server",
 
+	Category: local.CategoryMessaging,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

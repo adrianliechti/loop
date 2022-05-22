@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  MSSQL,
 	Usage: "local MSSQL server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

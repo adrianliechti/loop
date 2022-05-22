@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/adrianliechti/loop/app/local"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kind"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -19,6 +20,8 @@ const (
 var Command = &cli.Command{
 	Name:  Kubernetes,
 	Usage: "local Kubernetes cluster",
+
+	Category: local.CategoryCluster,
 
 	HideHelpCommand: true,
 

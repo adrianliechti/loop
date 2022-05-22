@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  Elasticsearch,
 	Usage: "local Elasticsearch server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  Vault,
 	Usage: "local Vault server",
 
+	Category: local.CategoryStorage,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

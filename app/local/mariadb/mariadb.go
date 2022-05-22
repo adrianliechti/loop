@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  MariaDB,
 	Usage: "local MariaDB server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{

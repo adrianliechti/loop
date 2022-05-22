@@ -13,6 +13,8 @@ var Command = &cli.Command{
 	Name:  PostgreSQL,
 	Usage: "local PostgreSQL server",
 
+	Category: local.CategoryDatabase,
+
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
