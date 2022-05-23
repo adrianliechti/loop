@@ -1,4 +1,4 @@
-# DevOps Loop Power-Ups
+# loop - DevOps Power-Ups
 
 ## Requirements
 
@@ -30,51 +30,24 @@ brew install adrianliechti/tap/loop
 
 ## Feature & Usage
 
-### Cluster Config
-
-Import and merge a Kubernetes config file
-
-```
-loop config import -f path/to/config
-```
-
-List available config contexts or switch default context
-
-```
-loop config context [<context>]
-```
-
-List available namespaces or set default namespace
-
-```
-loop config namespace [<namespace>]
-```
-
-
 ### Cluster Applications
 
 List applications on cluster or specified namespace
 
 ```
 loop app list [--namespace <namespace>]
-
-namespace: application namespace
 ```
 
 Get config information about an application
 
 ```
-loop app info --name <namespace> [--namespace <namespace>]
-
-namespace: application namespace
+loop app info --name <name> [--namespace <namespace>]
 ```
 
 Follow logs of all application's container(s)
 
 ```
-loop app logs --name <namespace> [--namespace <namespace>]
-
-namespace: application namespace
+loop app logs --name <name> [--namespace <namespace>]
 ```
 
 
@@ -141,8 +114,6 @@ Temporary start a remote [Docker](https://www.docker.com/) daemon to leverage ad
 
 ```
 loop remote docker [--namespace <namespace>]
-
-namespace: namespace to create temporary daemon in (default: default)
 ```
 
 Start and attach a remote shell with the current workdir mounted in /mnt/src.
@@ -151,7 +122,6 @@ Start and attach a remote shell with the current workdir mounted in /mnt/src.
 loop remote shell [--image >image>] [--namespace <namespace>]
 
 image:     image to use for shell
-namespace: namespace to create temporary daemon in (default: default)
 ```
 
 Start a remote VSCode Server with the current workdir mounted in /mnt/src.
@@ -160,44 +130,4 @@ Start a remote VSCode Server with the current workdir mounted in /mnt/src.
 loop remote code [--namespace <namespace>]
 
 port:      local port to access VSCode Server Web UI
-namespace: namespace to create temporary daemon in (default: default)
-```
-
-
-### Docker Image Utilities
-
-Browse an explore image layers using [dive](https://github.com/wagoodman/dive)
-
-```
-loop image browse --image <image>[:<tag>]
-```
-
-Lint images for security and configuration issues using [dockle](https://github.com/goodwithtech/dockle)
-
-```
-loop image lint --image <image>[:<tag>]
-```
-
-Export Dockerfiles from images using
-[whaler](https://github.com/P3GLEG/Whaler)
-
-```
-loop image analyze --image <image>[:<tag>]
-```
-
-Scan for vulnerability and configuration issue using
-[trivy](https://github.com/aquasecurity/trivy)
-
-```
-loop image scan --image <image>[:<tag>]
-```
-
-Create a runnable app image from source code in workdir. The command useses [Cloud Native Buildpacks
-](https://buildpacks.io/) and the [Google Builder & Buildpacks](https://github.com/GoogleCloudPlatform/buildpacks) by default
-
-```
-loop image pack --image <image> [--builder <builder image>]
-
-image:   application image
-builder: builder image
 ```
