@@ -1,5 +1,5 @@
 # builder
-FROM golang:1.17-alpine3.14 as builder
+FROM golang:1.18-alpine3.15 as builder
 
 WORKDIR /src
 COPY . .
@@ -9,9 +9,9 @@ RUN go build -o dns
 
 
 # runner
-FROM alpine:3.14
+FROM alpine:3.15
 
-RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing \
+RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community \
     tini \
     coredns
 

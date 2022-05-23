@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -17,7 +16,6 @@ import (
 )
 
 const (
-	PodZone     string = "pod.cluster.local"
 	ServiceZone string = "svc.cluster.local"
 )
 
@@ -25,25 +23,22 @@ func main() {
 	config, err := rest.InClusterConfig()
 
 	if err != nil {
-		log.WithError(err).
-			Panic("unable to load config")
+		log.Fatal(err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 
 	if err != nil {
-		log.WithError(err).
-			Panic("unable to create client")
+		log.Fatal(err)
 	}
 
 	ctx := context.Background()
 
 	if err := refresh(ctx, clientset); err != nil {
-		log.WithError(err).
-			Panic("unable to initially refresh hosts")
+		log.Fatal("unable to initially refresh hosts", err)
 	}
 
-	log.Info("hosts refreshed")
+	log.Println("hosts refreshed")
 
 	timestamp := time.Now()
 
@@ -62,11 +57,11 @@ func main() {
 				event, ok := <-c
 
 				if !ok {
-					log.Warn("service watcher failed")
+					log.Println("service watcher failed")
 					break
 				}
 
-				log.Info("received services update")
+				log.Println("received services update")
 
 				_ = event
 				timestamp = time.Now()
@@ -83,18 +78,17 @@ func main() {
 			<-ticker.C
 
 			if timestamp.Equal(t) || t.After(timestamp) {
-				log.Info("skip")
+				log.Println("skip")
 				continue
 			}
 
 			t = time.Now()
 
 			if err := refresh(ctx, clientset); err != nil {
-				log.WithError(err).
-					Panic("unable to refresh hosts")
+				log.Fatal(err)
 			}
 
-			log.Info("hosts refreshed")
+			log.Println("hosts refreshed")
 		}
 	}()
 
