@@ -3,6 +3,8 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/adrianliechti/loop/app"
@@ -38,7 +40,26 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port int) error
 		port = target
 	}
 
+	tool, _, err := docker.Tool(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	image := "kubernetesui/dashboard:v2.5.1"
+	exec.CommandContext(ctx, tool, "pull", image).Run()
+
 	args := []string{
+		"run",
+
+		"--publish",
+		fmt.Sprintf("127.0.0.1:%d:%d", port, target),
+
+		"--volume",
+		client.ConfigPath() + ":/kubeconfig",
+
+		image,
+
 		"--metrics-provider=none",
 		"--enable-skip-login",
 		"--enable-insecure-login",
@@ -46,25 +67,13 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port int) error
 		"--kubeconfig", "/kubeconfig",
 	}
 
-	options := docker.RunOptions{
-		Ports: map[int]int{
-			port: target,
-		},
-
-		Volumes: map[string]string{
-			client.ConfigPath(): "/kubeconfig",
-		},
-	}
-
-	image := "kubernetesui/dashboard:v2.5.1"
-
-	if err := docker.Pull(ctx, image); err != nil {
-		return err
-	}
-
 	time.AfterFunc(5*time.Second, func() {
 		cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
 	})
 
-	return docker.RunInteractive(ctx, image, options, args...)
+	cmd := exec.CommandContext(ctx, tool, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }
