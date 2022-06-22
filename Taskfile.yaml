@@ -1,0 +1,30 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  VERSION: 0.0.1
+
+tasks:
+  run: go run -ldflags "-X main.version={{.VERSION}}" .
+  build: go build -ldflags "-X main.version={{.VERSION}}" .
+  install: go build -ldflags "-X main.version=$(version)" -o /usr/local/bin/loop .
+
+  push-images:
+    cmds:
+      - task: push-dns-image
+      - task: push-tunnel-image
+
+  push-dns-image:
+    dir: helpers/loop-dns
+    vars:
+      DOCKER_IMAGE: adrianliechti/loop-dns
+    cmds:
+      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
+
+  push-tunnel-image:
+    dir: helpers/loop-tunnel
+    vars:
+      DOCKER_IMAGE: adrianliechti/loop-tunnel
+    cmds:
+      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .

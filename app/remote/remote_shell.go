@@ -286,7 +286,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name st
 		"localhost",
 	}
 
-	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/src /mnt/src && exec /bin/ash"
+	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/src /mnt/src && exec /bin/sh"
 
 	if port != 0 {
 		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))

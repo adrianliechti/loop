@@ -1,17 +1,18 @@
-FROM alpine:3.15
+FROM debian:bullseye-slim
 
-RUN apk add  --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
-    bash \
+    netcat \
     python3 \
-    openssh \
-    sshfs
+    openssh-server \
+    sshfs \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN passwd -d root && \
-    echo -e "NoHostAuthenticationForLocalhost yes\n" > /etc/ssh/ssh_config && \
-    echo -e "Port 22\nAllowTcpForwarding yes\nAllowStreamLocalForwarding yes\nGatewayPorts yes\nPermitEmptyPasswords yes\nPermitRootLogin yes\nSubsystem sftp /usr/lib/ssh/sftp-server\n" > /etc/ssh/sshd_config
+RUN mkdir -p /run/sshd \
+    && passwd -d root
 
-EXPOSE 22
+COPY --chown=root:root ssh_config /etc/ssh/ssh_config
+COPY --chown=root:root sshd_config /etc/ssh/sshd_config
 
 ENTRYPOINT ["tini", "--"]
-CMD [ "sh", "-c", "ssh-keygen -A && /usr/sbin/sshd -4 -D" ]
+CMD [ "/usr/sbin/sshd", "-4", "-D" ]

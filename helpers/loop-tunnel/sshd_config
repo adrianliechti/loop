@@ -1,0 +1,7 @@
+Port 22
+AllowTcpForwarding yes
+AllowStreamLocalForwarding yes
+GatewayPorts yes
+PermitEmptyPasswords yes
+PermitRootLogin yes
+Subsystem sftp /usr/lib/openssh/sftp-server
