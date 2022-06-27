@@ -53,10 +53,6 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	msg := &dns.Msg{}
-
-	msg.SetReply(r)
-
 	if r.Question[0].Qtype == dns.TypeA {
 		domain := r.Question[0].Name
 
@@ -66,15 +62,24 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			goto FALLBACK
 		}
 
+		msg := &dns.Msg{}
+
+		msg.SetReply(r)
 		msg.Authoritative = true
 
 		msg.Answer = append(msg.Answer, &dns.A{
-			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 10},
 			A:   address,
 		})
+
+		w.WriteMsg(msg)
+		return
 	}
 
 FALLBACK:
+	msg := &dns.Msg{}
+	msg.SetReply(r)
+
 	res, err := s.exchange(msg)
 
 	if err != nil {
