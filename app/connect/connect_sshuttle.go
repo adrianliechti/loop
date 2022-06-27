@@ -67,7 +67,6 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 }
 
 func createShuttle(ctx context.Context, client kubernetes.Client, namespace, name string) (*corev1.Pod, error) {
-
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,

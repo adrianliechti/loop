@@ -12,4 +12,4 @@ if [ ! -f /run/sshd/ssh_host_ed25519_key ]; then
     /usr/bin/ssh-keygen -q -N "" -t ed25519 -f /run/sshd/ssh_host_ed25519_key
 fi
 
-/usr/sbin/sshd -D -d -e
+exec /usr/sbin/sshd -D -d -e
