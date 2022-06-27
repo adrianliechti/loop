@@ -18,13 +18,13 @@ tasks:
   push-dns-image:
     dir: helpers/loop-dns
     vars:
-      DOCKER_IMAGE: adrianliechti/loop-dns
+      DOCKER_IMAGE: adrianliechti/loop-dns:new
     cmds:
       - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
 
   push-tunnel-image:
     dir: helpers/loop-tunnel
     vars:
-      DOCKER_IMAGE: adrianliechti/loop-tunnel
+      DOCKER_IMAGE: adrianliechti/loop-tunnel:new
     cmds:
       - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .

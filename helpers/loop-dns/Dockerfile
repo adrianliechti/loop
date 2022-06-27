@@ -10,10 +10,11 @@ RUN go build -o dns
 
 FROM alpine:3.15
 
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini libcap
 
 WORKDIR /app
 COPY --from=builder /src/dns .
+RUN setcap 'cap_net_bind_service=+ep' /app/dns
 
 ENTRYPOINT ["tini", "--"]
 CMD [ "/app/dns" ]
