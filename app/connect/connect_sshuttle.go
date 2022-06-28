@@ -52,7 +52,7 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 		"--dns",
 		"--to-ns=127.0.0.1",
 		"-r",
-		"root@localhost",
+		"loop@localhost",
 		"-e",
 		kubectl + " exec -i " + pod.Name + " -n " + pod.Namespace + " -c sshuttle --kubeconfig " + client.ConfigPath() + " -- ssh",
 		"10.0.0.0/8",

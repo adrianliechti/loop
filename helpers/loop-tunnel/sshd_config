@@ -1,10 +1,19 @@
 Port 22
 ListenAddress 127.0.0.1
 
-PermitRootLogin yes
+LogLevel DEBUG
+
+HostKey /run/sshd/ssh_host_rsa_key
+HostKey /run/sshd/ssh_host_ecdsa_key
+HostKey /run/sshd/ssh_host_ed25519_key
+
+AuthorizedKeysFile none
+
+PermitRootLogin no
 PermitEmptyPasswords yes
 
 AllowTcpForwarding yes
+AllowAgentForwarding yes
 AllowStreamLocalForwarding yes
 GatewayPorts yes
 X11Forwarding yes
@@ -12,5 +21,3 @@ X11Forwarding yes
 PidFile /run/sshd/sshd.pid
 
 Subsystem sftp /usr/lib/ssh/sftp-server
-
-ChrootDirectory none
