@@ -10,6 +10,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/sshuttle"
+	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
 
@@ -127,9 +128,9 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 }
 
 func deleteShuttle(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		//return err
-	}
+	client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		GracePeriodSeconds: to.Int64Ptr(0),
+	})
 
 	return nil
 }
