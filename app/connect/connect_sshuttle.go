@@ -80,8 +80,6 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					ImagePullPolicy: corev1.PullAlways,
-
 					Name:  "sshuttle",
 					Image: "adrianliechti/loop-tunnel:new",
 
@@ -97,8 +95,6 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 					},
 				},
 				{
-					ImagePullPolicy: corev1.PullAlways,
-
 					Name:  "dns",
 					Image: "adrianliechti/loop-dns:new",
 
