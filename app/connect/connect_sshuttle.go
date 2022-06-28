@@ -81,7 +81,7 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 			Containers: []corev1.Container{
 				{
 					Name:  "sshuttle",
-					Image: "adrianliechti/loop-tunnel:new",
+					Image: "adrianliechti/loop-tunnel:0",
 
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -96,7 +96,7 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 				},
 				{
 					Name:  "dns",
-					Image: "adrianliechti/loop-dns:new",
+					Image: "adrianliechti/loop-dns:0",
 
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
