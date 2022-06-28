@@ -302,6 +302,10 @@ func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
 			}
 		}
 
+		if containerPort == 0 {
+			containerPort = servicePort
+		}
+
 		if servicePort > 0 && containerPort > 0 {
 			ports[strconv.Itoa(servicePort)] = strconv.Itoa(containerPort)
 		}
