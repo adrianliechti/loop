@@ -32,6 +32,10 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 		return err
 	}
 
+	// Kubeadm: Services CIDR 10.96.0.0/12?, Pod CIDR 172.16.0.0/16?
+	// OpenShift: Services CIDR 172.30.0.0/16, Pod CIDR 10.128.0.0/14
+	cidr := "0.0.0.0/0"
+
 	name := "loop-sshuttle-" + uuid.New().String()[0:7]
 
 	defer func() {
@@ -47,16 +51,12 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 	}
 
 	args := []string{
-		"-v",
-		"--method",
-		"auto",
-		"--dns",
-		"--to-ns=127.0.0.1",
-		"-r",
-		"loop@localhost",
-		"-e",
-		kubectl + " exec -i " + pod.Name + " -n " + pod.Namespace + " -c sshuttle --kubeconfig " + client.ConfigPath() + " -- ssh",
-		"10.0.0.0/8",
+		//"-v",
+		"--method", "auto",
+		"--dns", "--to-ns=127.0.0.1",
+		"-r", "loop@localhost",
+		"-e", kubectl + " exec -i " + pod.Name + " -n " + pod.Namespace + " -c sshuttle --kubeconfig " + client.ConfigPath() + " -- ssh",
+		cidr,
 	}
 
 	cmd := exec.CommandContext(ctx, sshuttle, args...)
