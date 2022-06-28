@@ -8,20 +8,13 @@ RUN go mod download
 RUN go build -o dns
 
 
-# runner
 FROM alpine:3.15
 
-RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community \
-    tini \
-    coredns
+RUN apk add --no-cache tini libcap
 
-WORKDIR /app/
-
-ENV PATH "/app:${PATH}"
-
+WORKDIR /app
 COPY --from=builder /src/dns .
-COPY --chown=root:root Corefile .
+RUN setcap 'cap_net_bind_service=+ep' /app/dns
 
 ENTRYPOINT ["tini", "--"]
-CMD [ "dns" ]
-
+CMD [ "/app/dns" ]

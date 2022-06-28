@@ -1,190 +1,149 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"io/ioutil"
-	"log"
-	"os"
-	"os/exec"
+	"errors"
+	"net"
 	"strings"
-	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
-	ServiceZone string = "svc.cluster.local"
+	ResolvConf = "/etc/resolv.conf"
 )
 
 func main() {
-	config, err := rest.InClusterConfig()
+	s, err := New()
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ctx := context.Background()
-
-	if err := refresh(ctx, clientset); err != nil {
-		log.Fatal("unable to initially refresh hosts", err)
-	}
-
-	log.Println("hosts refreshed")
-
-	timestamp := time.Now()
-
-	go func() {
-		for {
-			watch, err := clientset.CoreV1().Services("").Watch(ctx, metav1.ListOptions{})
-
-			if err != nil {
-				time.Sleep(10 * time.Second)
-				continue
-			}
-
-			c := watch.ResultChan()
-
-			for {
-				event, ok := <-c
-
-				if !ok {
-					log.Println("service watcher failed")
-					break
-				}
-
-				log.Println("received services update")
-
-				_ = event
-				timestamp = time.Now()
-			}
-		}
-	}()
-
-	ticker := time.NewTicker(10 * time.Second)
-
-	go func() {
-		t := timestamp
-
-		for {
-			<-ticker.C
-
-			if timestamp.Equal(t) || t.After(timestamp) {
-				log.Println("skip")
-				continue
-			}
-
-			t = time.Now()
-
-			if err := refresh(ctx, clientset); err != nil {
-				log.Fatal(err)
-			}
-
-			log.Println("hosts refreshed")
-		}
-	}()
-
-	cmd := exec.Command("coredns")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	panic(cmd.Run())
+	log.Fatal(s.ListenAndServe())
 }
 
-func refresh(ctx context.Context, clientset *kubernetes.Clientset) error {
-	mappings, err := getMappings(ctx, clientset)
-
-	if err != nil {
-		return err
-	}
-
-	if err := writeHosts("kubernetes", mappings); err != nil {
-		return err
-	}
-
-	return nil
+type Server struct {
+	config *dns.ClientConfig
 }
 
-func getMappings(ctx context.Context, clientset *kubernetes.Clientset) (map[string]string, error) {
-	result := make(map[string]string)
-
-	services, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+func New() (*Server, error) {
+	config, err := dns.ClientConfigFromFile(ResolvConf)
 
 	if err != nil {
 		return nil, err
 	}
 
-	for _, service := range services.Items {
-		if service.Spec.ClusterIP == "" {
+	s := &Server{
+		config: config,
+	}
+
+	return s, nil
+}
+
+func (s *Server) ListenAndServe() error {
+	srv := &dns.Server{
+		Addr: ":53",
+		Net:  "udp",
+
+		Handler: s,
+	}
+
+	return srv.ListenAndServe()
+}
+
+func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	msg, err := s.exchange(r)
+
+	if err != nil {
+		msg = new(dns.Msg)
+		msg.SetReply(r)
+
+		w.WriteMsg(msg)
+		return
+	}
+
+	if msg.Rcode == dns.RcodeSuccess {
+		w.WriteMsg(msg)
+		return
+	}
+
+	msg = new(dns.Msg)
+	msg.SetReply(r)
+
+	if len(msg.Question) == 1 {
+		log.WithFields(log.Fields{
+			"name": r.Question[0].Name,
+			"type": r.Question[0].Qtype,
+		}).Info("not handled")
+
+		if r.Question[0].Qtype == dns.TypeA {
+			name := r.Question[0].Name
+
+			if addr, err := s.queryA(name); err == nil {
+				msg.Authoritative = true
+
+				msg.Answer = append(msg.Answer, &dns.A{
+					Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 10},
+					A:   addr,
+				})
+			}
+		}
+	}
+
+	w.WriteMsg(msg)
+}
+
+func (s *Server) exchange(m *dns.Msg) (*dns.Msg, error) {
+	for _, host := range s.config.Servers {
+		addr := net.JoinHostPort(host, s.config.Port)
+
+		msg, err := dns.Exchange(m, addr)
+
+		if err != nil {
 			continue
 		}
 
-		dns1 := strings.Join([]string{service.Name, service.Namespace}, ".")
-		dns2 := strings.Join([]string{service.Name, service.Namespace, ServiceZone}, ".")
-
-		result[dns1] = service.Spec.ClusterIP
-		result[dns2] = service.Spec.ClusterIP
-
-		if service.Namespace == "default" {
-			result[service.Name] = service.Spec.ClusterIP
-		}
+		return msg, nil
 	}
 
-	return result, nil
+	return nil, errors.New("failed to exchange")
 }
 
-func writeHosts(path string, hosts map[string]string) error {
-	entries := make(map[string][]string)
+func (s *Server) queryA(name string) (net.IP, error) {
+	domains := []string{
+		strings.TrimSuffix(name, ".") + ".",
+	}
 
-	for _, ip := range hosts {
-		aliases, ok := entries[ip]
-		_ = ok
+	for _, s := range s.config.Search {
+		d := strings.TrimSuffix(name, ".") + "." + strings.TrimSuffix(s, ".") + "."
+		domains = append(domains, d)
+	}
 
-		for host, hostIP := range hosts {
-			if hostIP != ip {
-				continue
-			}
+	for _, d := range domains {
+		log.WithFields(log.Fields{
+			"name": d,
+		}).Info("lookup address")
 
-			aliases = append(aliases, host)
+		msg := &dns.Msg{}
+
+		msg.RecursionDesired = true
+		msg.SetQuestion(d, dns.TypeA)
+
+		res, err := s.exchange(msg)
+
+		if err != nil || len(res.Answer) == 0 {
+			continue
 		}
 
-		entries[ip] = unique(aliases)
-	}
+		answer, ok := res.Answer[0].(*dns.A)
 
-	var buffer bytes.Buffer
-
-	for ip, aliases := range entries {
-		buffer.WriteString(ip + " \t" + strings.Join(aliases, " ") + " \n")
-	}
-
-	return ioutil.WriteFile(path, buffer.Bytes(), 0666)
-}
-
-func unique(e []string) []string {
-	var r []string
-
-	for _, s := range e {
-		if !contains(r[:], s) {
-			r = append(r, s)
+		if !ok || answer.A == nil {
+			continue
 		}
-	}
-	return r
-}
 
-func contains(e []string, c string) bool {
-	for _, s := range e {
-		if s == c {
-			return true
-		}
+		return answer.A, nil
 	}
-	return false
+
+	return nil, errors.New("IP not found")
 }
