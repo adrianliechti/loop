@@ -286,24 +286,20 @@ func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
 		servicePort := int(port.Port)
 		containerPort := 0
 
+		if port.Protocol != "" && port.Protocol != corev1.ProtocolTCP {
+			continue
+		}
+
 		for _, container := range pod.Spec.Containers {
 			for _, p := range container.Ports {
-				if p.Protocol != "" && p.Protocol != corev1.ProtocolTCP {
-					continue
-				}
-
-				if p.Name == port.TargetPort.String() {
-					containerPort = int(p.ContainerPort)
-				}
-
-				if p.ContainerPort > 0 && p.ContainerPort == port.TargetPort.IntVal {
+				if p.Name != "" && p.Name == port.TargetPort.String() {
 					containerPort = int(p.ContainerPort)
 				}
 			}
 		}
 
-		if containerPort == 0 {
-			containerPort = servicePort
+		if port.TargetPort.IntVal > 0 {
+			containerPort = int(port.TargetPort.IntVal)
 		}
 
 		if servicePort > 0 && containerPort > 0 {
