@@ -18,6 +18,7 @@ var httpCommand = &cli.Command{
 	Flags: []cli.Flag{
 		app.NameFlag,
 		app.NamespaceFlag,
+		app.KubeconfigFlag,
 		&cli.IntFlag{
 			Name:     app.PortFlag.Name,
 			Usage:    "local port to expose",

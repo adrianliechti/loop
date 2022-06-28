@@ -19,6 +19,7 @@ var Command = &cli.Command{
 	Flags: []cli.Flag{
 		app.ScopeFlag,
 		app.NamespaceFlag,
+		app.KubeconfigFlag,
 	},
 
 	Action: func(c *cli.Context) error {
@@ -54,6 +55,8 @@ var Command = &cli.Command{
 			if scope != nil && len(*scope) > 0 {
 				args = append(args, "--"+app.ScopeFlag.Name, *scope)
 			}
+
+			args = append(args, "--kubeconfig", client.ConfigPath())
 
 			os.Args = args
 

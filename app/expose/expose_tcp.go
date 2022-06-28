@@ -18,6 +18,7 @@ var tcpCommand = &cli.Command{
 	Flags: []cli.Flag{
 		app.NameFlag,
 		app.NamespaceFlag,
+		app.KubeconfigFlag,
 		&cli.IntSliceFlag{
 			Name:     app.PortsFlag.Name,
 			Usage:    "local port(s) to expose",

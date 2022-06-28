@@ -19,6 +19,7 @@ var codeCommand = &cli.Command{
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
+		app.KubeconfigFlag,
 		&cli.StringFlag{
 			Name:  app.PortFlag.Name,
 			Usage: "local server port",

@@ -18,6 +18,7 @@ var Command = &cli.Command{
 	Usage: "start Kubernetes Dashboard",
 
 	Flags: []cli.Flag{
+		app.KubeconfigFlag,
 		&cli.StringFlag{
 			Name:  app.PortFlag.Name,
 			Usage: "local dashboard port",

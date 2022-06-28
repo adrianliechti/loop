@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/catapult"
 	"github.com/adrianliechti/loop/app/connect"
@@ -35,10 +34,6 @@ func initApp() cli.App {
 		Usage:   "DevOps Loop",
 
 		HideHelpCommand: true,
-
-		Flags: []cli.Flag{
-			app.KubeconfigFlag,
-		},
 
 		Commands: []*cli.Command{
 			application.Command,
