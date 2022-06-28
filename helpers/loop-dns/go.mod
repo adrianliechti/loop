@@ -2,7 +2,10 @@ module dns
 
 go 1.18
 
-require github.com/miekg/dns v1.1.50
+require (
+	github.com/miekg/dns v1.1.50
+	github.com/sirupsen/logrus v1.8.1
+)
 
 require (
 	golang.org/x/mod v0.4.2 // indirect

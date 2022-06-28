@@ -2,11 +2,11 @@ package main
 
 import (
 	"errors"
-	"log"
 	"net"
 	"strings"
 
 	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -53,39 +53,45 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	if r.Question[0].Qtype == dns.TypeA {
-		domain := r.Question[0].Name
+	msg, err := s.exchange(r)
 
-		address, err := s.queryA(domain)
-
-		if err != nil {
-			goto FALLBACK
-		}
-
-		msg := &dns.Msg{}
-
+	if err != nil {
+		msg = new(dns.Msg)
 		msg.SetReply(r)
-		msg.Authoritative = true
-
-		msg.Answer = append(msg.Answer, &dns.A{
-			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 10},
-			A:   address,
-		})
 
 		w.WriteMsg(msg)
 		return
 	}
 
-FALLBACK:
-	msg := &dns.Msg{}
-	msg.SetReply(r)
-
-	res, err := s.exchange(msg)
-
-	if err != nil {
+	if msg.Rcode == dns.RcodeSuccess {
+		w.WriteMsg(msg)
+		return
 	}
 
-	w.WriteMsg(res)
+	msg = new(dns.Msg)
+	msg.SetReply(r)
+
+	if len(msg.Question) == 1 {
+		log.WithFields(log.Fields{
+			"name": r.Question[0].Name,
+			"type": r.Question[0].Qtype,
+		}).Info("not handled")
+
+		if r.Question[0].Qtype == dns.TypeA {
+			name := r.Question[0].Name
+
+			if addr, err := s.queryA(name); err == nil {
+				msg.Authoritative = true
+
+				msg.Answer = append(msg.Answer, &dns.A{
+					Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 10},
+					A:   addr,
+				})
+			}
+		}
+	}
+
+	w.WriteMsg(msg)
 }
 
 func (s *Server) exchange(m *dns.Msg) (*dns.Msg, error) {
@@ -98,10 +104,10 @@ func (s *Server) exchange(m *dns.Msg) (*dns.Msg, error) {
 			continue
 		}
 
-		return msg, err
+		return msg, nil
 	}
 
-	return nil, errors.New("no dns server available")
+	return nil, errors.New("failed to exchange")
 }
 
 func (s *Server) queryA(name string) (net.IP, error) {
@@ -115,6 +121,10 @@ func (s *Server) queryA(name string) (net.IP, error) {
 	}
 
 	for _, d := range domains {
+		log.WithFields(log.Fields{
+			"name": d,
+		}).Info("lookup address")
+
 		msg := &dns.Msg{}
 
 		msg.RecursionDesired = true
@@ -122,15 +132,16 @@ func (s *Server) queryA(name string) (net.IP, error) {
 
 		res, err := s.exchange(msg)
 
-		if err != nil {
+		if err != nil || len(res.Answer) == 0 {
 			continue
 		}
 
-		if len(res.Answer) == 0 {
+		answer, ok := res.Answer[0].(*dns.A)
+
+		if !ok || answer.A == nil {
 			continue
 		}
 
-		answer := res.Answer[0].(*dns.A)
 		return answer.A, nil
 	}
 
