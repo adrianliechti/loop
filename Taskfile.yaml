@@ -13,12 +13,20 @@ tasks:
   push-images:
     cmds:
       - task: push-dns-image
+      - task: push-socks-image
       - task: push-tunnel-image
 
   push-dns-image:
     dir: helpers/loop-dns
     vars:
       DOCKER_IMAGE: adrianliechti/loop-dns:0
+    cmds:
+      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
+
+  push-socks-image:
+    dir: helpers/loop-socks
+    vars:
+      DOCKER_IMAGE: adrianliechti/loop-socks:0
     cmds:
       - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
 
