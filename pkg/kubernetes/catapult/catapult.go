@@ -7,8 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os/exec"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
 	"github.com/hashicorp/go-multierror"
@@ -78,7 +77,11 @@ func Start(ctx context.Context, client kubernetes.Client, options CatapultOption
 		}
 
 		if !isHeadless {
-			if pod, ok := primaryPod(pods.Items); ok {
+			for _, pod := range pods.Items {
+				if pod.Status.Phase != corev1.PodRunning {
+					continue
+				}
+
 				ports := portMapping(service, pod)
 
 				if len(ports) == 0 {
@@ -114,11 +117,7 @@ func Start(ctx context.Context, client kubernetes.Client, options CatapultOption
 			for _, pod := range pods.Items {
 				ports := portMapping(service, pod)
 
-				if len(ports) == 0 {
-					continue
-				}
-
-				if pod.Status.PodIP == "" {
+				if pod.Status.PodIP == "" || len(ports) == 0 {
 					continue
 				}
 
@@ -214,12 +213,12 @@ func Start(ctx context.Context, client kubernetes.Client, options CatapultOption
 			continue
 		}
 
-		if err := aliasIP(ctx, tunnel.Address); err != nil {
+		if err := system.AliasIP(ctx, tunnel.Address); err != nil {
 			errsetup = multierror.Append(errsetup, err)
 			continue
 		}
 
-		defer unaliasIP(context.Background(), tunnel.Address)
+		defer system.UnaliasIP(context.Background(), tunnel.Address)
 	}
 
 	if err := hostsfile.Flush(); err != nil {
@@ -308,32 +307,6 @@ func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
 	}
 
 	return ports
-}
-
-func aliasIP(ctx context.Context, alias string) error {
-	if runtime.GOOS == "darwin" {
-		ifconfig := exec.CommandContext(ctx, "ifconfig", "lo0", "alias", alias)
-
-		if err := ifconfig.Run(); err != nil {
-			if ee, ok := err.(*exec.ExitError); ok {
-				cli.Info(string(ee.Stderr))
-			}
-		}
-	}
-
-	return nil
-}
-
-func unaliasIP(ctx context.Context, alias string) error {
-	if runtime.GOOS == "darwin" {
-		ifconfig := exec.CommandContext(ctx, "ifconfig", "lo0", "-alias", alias)
-
-		if err := ifconfig.Run(); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func forward(ctx context.Context, client kubernetes.Client, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error {

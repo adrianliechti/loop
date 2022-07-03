@@ -2,8 +2,13 @@
 
 package system
 
+import (
+	"fmt"
+	"os/exec"
+)
+
 func SetSocksProxy(host, port string) error {
-	if err := exec.Command("netsh", "winhttp", "set", "proxy", fmt.Stringf("proxy-server=\"socks=%s:%s\"", host, prot), "bypass-list=\"localhost\"").Run(); err != nil {
+	if err := exec.Command("netsh", "winhttp", "set", "proxy", fmt.Sprintf("proxy-server=\"socks=%s:%s\"", host, port), "bypass-list=\"localhost\"").Run(); err != nil {
 		return err
 	}
 

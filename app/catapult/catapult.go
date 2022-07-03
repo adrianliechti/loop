@@ -28,12 +28,10 @@ var Command = &cli.Command{
 		scope := app.Scope(c)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
-		}
-
-		if scope == nil {
-			scope = namespace
+		if namespace != nil {
+			if scope == nil {
+				scope = namespace
+			}
 		}
 
 		elevated, err := system.IsElevated()
@@ -67,13 +65,21 @@ var Command = &cli.Command{
 			os.Exit(0)
 		}
 
-		return startCatapult(c.Context, client, *namespace, *scope)
+		return startCatapult(c.Context, client, namespace, scope)
 	},
 }
 
-func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope string) error {
+func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope *string) error {
+	if namespace == nil {
+		namespace = to.StringPtr("")
+	}
+
+	if scope == nil {
+		scope = to.StringPtr(client.Namespace())
+	}
+
 	return catapult.Start(ctx, client, catapult.CatapultOptions{
-		Scope:     scope,
-		Namespace: namespace,
+		Scope:     *scope,
+		Namespace: *namespace,
 	})
 }
