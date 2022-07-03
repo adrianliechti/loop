@@ -2,11 +2,13 @@ package proxy
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
@@ -43,6 +45,10 @@ func runProxy(ctx context.Context, client kubernetes.Client, namespace string, p
 	name := "loop-proxy-" + uuid.New().String()[0:7]
 
 	defer func() {
+		if err := system.ResetSocksProxy(); err != nil {
+			cli.Error("unable to reset system proxy", err)
+		}
+
 		cli.Infof("Stopping proxy pod (%s/%s)...", namespace, name)
 		deleteProxy(context.Background(), client, namespace, name)
 	}()
@@ -62,6 +68,10 @@ func runProxy(ctx context.Context, client kubernetes.Client, namespace string, p
 
 	go func() {
 		<-ready
+
+		if err := system.SetSocksProxy("localhost", strconv.Itoa(port)); err != nil {
+			cli.Error("unable to configure system proxy", err)
+		}
 
 		cli.Infof("export http_proxy=socks5h://localhost:%d", port)
 		cli.Infof("export https_proxy=socks5h://localhost:%d", port)
