@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -101,17 +100,6 @@ func createProxy(ctx context.Context, client kubernetes.Client, namespace, name 
 				{
 					Name:  "proxy",
 					Image: "adrianliechti/loop-socks:0",
-
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-					},
 				},
 			},
 		},
