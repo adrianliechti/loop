@@ -78,8 +78,14 @@ func startCatapult(ctx context.Context, client kubernetes.Client, namespace, sco
 		scope = to.StringPtr(client.Namespace())
 	}
 
-	return catapult.Start(ctx, client, catapult.CatapultOptions{
+	catapult, err := catapult.New(client, catapult.CatapultOptions{
 		Scope:     *scope,
 		Namespace: *namespace,
 	})
+
+	if err != nil {
+		return err
+	}
+
+	return catapult.Start(ctx)
 }
