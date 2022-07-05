@@ -10,9 +10,10 @@ import (
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
-	"github.com/hashicorp/go-multierror"
 
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
+	"github.com/go-logr/logr"
+	"github.com/hashicorp/go-multierror"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,6 +79,8 @@ func (c *Catapult) Start(ctx context.Context) error {
 }
 
 func (c *Catapult) Refresh(ctx context.Context) error {
+	log := logr.FromContextOrDiscard(ctx)
+
 	tunnels, err := c.listTunnel(ctx)
 
 	if err != nil {
@@ -103,7 +106,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if removed {
-			println("remove", tunnel.namespace, tunnel.name)
+			log.Info("removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
 
 			tunnel.Stop()
 
@@ -132,7 +135,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if added {
-			println("added", tunnel.namespace, tunnel.name)
+			log.Info("adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
 
 			if err := system.AliasIP(ctx, tunnel.address); err != nil {
 				result = multierror.Append(result, err)
@@ -196,12 +199,12 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 			ports := selectPorts(service, pod.Spec.Containers...)
 
 			hosts := []string{
-				fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
 				fmt.Sprintf("%s.%s", service.Name, service.Namespace),
+				fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
 			}
 
 			if service.Namespace == c.options.Scope {
-				hosts = append(hosts, service.Name)
+				hosts = append([]string{service.Name}, hosts...)
 			}
 
 			tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))

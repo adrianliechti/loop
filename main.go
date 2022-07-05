@@ -14,6 +14,9 @@ import (
 	"github.com/adrianliechti/loop/app/proxy"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/pkg/cli"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 )
 
 var version string
@@ -21,6 +24,8 @@ var version string
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
+
+	ctx = logr.NewContext(ctx, stdr.New(nil))
 
 	app := initApp()
 

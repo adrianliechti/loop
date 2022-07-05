@@ -5,6 +5,8 @@ go 1.18
 require (
 	github.com/ChrisWiegman/goodhosts/v4 v4.0.0
 	github.com/Masterminds/semver v1.5.0
+	github.com/go-logr/logr v1.2.2
+	github.com/go-logr/stdr v1.2.2
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/manifoldco/promptui v0.9.0
@@ -26,7 +28,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful v2.9.5+incompatible // indirect
-	github.com/go-logr/logr v1.2.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
