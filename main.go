@@ -7,11 +7,9 @@ import (
 	"syscall"
 
 	"github.com/adrianliechti/loop/app/application"
-	"github.com/adrianliechti/loop/app/catapult"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/expose"
-	"github.com/adrianliechti/loop/app/proxy"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/pkg/cli"
 
@@ -45,8 +43,6 @@ func initApp() cli.App {
 			application.Command,
 
 			connect.Command,
-			catapult.Command,
-			proxy.Command,
 
 			dashboard.Command,
 

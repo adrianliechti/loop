@@ -1,4 +1,4 @@
-package catapult
+package connect
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"github.com/adrianliechti/loop/pkg/to"
 )
 
-var Command = &cli.Command{
+var catapultCommand = &cli.Command{
 	Name:  "catapult",
-	Usage: "connect Kubernetes services",
+	Usage: "connect services using port bulk-forwarding",
 
 	Flags: []cli.Flag{
 		app.ScopeFlag,
@@ -43,6 +43,7 @@ var Command = &cli.Command{
 		if !elevated {
 			args := []string{
 				os.Args[0],
+				"connect",
 				"catapult",
 			}
 

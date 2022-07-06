@@ -1,4 +1,4 @@
-package proxy
+package connect
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var Command = &cli.Command{
+var proxyCommand = &cli.Command{
 	Name:  "proxy",
-	Usage: "Proxy Kubernetes network (SOCKS5)",
+	Usage: "connect network using socks container",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
