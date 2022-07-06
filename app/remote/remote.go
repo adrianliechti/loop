@@ -11,8 +11,8 @@ var Command = &cli.Command{
 	HideHelpCommand: true,
 
 	Subcommands: []*cli.Command{
-		dockerCommand,
 		shellCommand,
 		codeCommand,
+		dockerCommand,
 	},
 }
