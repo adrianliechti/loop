@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -15,9 +16,29 @@ import (
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+var sshuttleCommand = &cli.Command{
+	Name:  "sshuttle",
+	Usage: "connect network using sshuttle container",
+
+	Flags: []cli.Flag{
+		app.NamespaceFlag,
+		app.KubeconfigFlag,
+	},
+
+	Action: func(c *cli.Context) error {
+		client := app.MustClient(c)
+		namespace := app.Namespace(c)
+
+		if namespace == nil {
+			namespace = to.StringPtr(client.Namespace())
+		}
+
+		return runShuttle(c.Context, client, *namespace)
+	},
+}
 
 func runShuttle(ctx context.Context, client kubernetes.Client, namespace string) error {
 	kubectl, _, err := kubectl.Tool(ctx)
@@ -82,32 +103,10 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 				{
 					Name:  "sshuttle",
 					Image: "adrianliechti/loop-tunnel:0",
-
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-					},
 				},
 				{
 					Name:  "dns",
 					Image: "adrianliechti/loop-dns:0",
-
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-					},
 				},
 			},
 		},

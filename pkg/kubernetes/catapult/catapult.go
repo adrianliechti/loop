@@ -2,30 +2,31 @@ package catapult
 
 import (
 	"context"
-	"errors"
+	"crypto/md5"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os/exec"
-	"runtime"
-	"sort"
-	"strconv"
-	"strings"
+	"io"
+	"net"
 	"time"
 
-	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/portforward"
-	"k8s.io/client-go/transport/spdy"
 )
+
+type Catapult struct {
+	client  kubernetes.Client
+	options CatapultOptions
+
+	tunnels   []*tunnel
+	hostsfile goodhosts.Hosts
+}
 
 type CatapultOptions struct {
 	Scope     string
@@ -34,253 +35,221 @@ type CatapultOptions struct {
 	Selector string
 }
 
-type tunnel struct {
-	Pod corev1.Pod
-
-	Hosts []string
-
-	Address string
-	Ports   map[string]string
-}
-
-func Start(ctx context.Context, client kubernetes.Client, options CatapultOptions) error {
-	services, err := client.CoreV1().Services(options.Namespace).
-		List(ctx, metav1.ListOptions{
-			LabelSelector: options.Selector,
-		})
-
-	if err != nil {
-		return err
-	}
-
-	var errinit error
-
-	var tunnels []tunnel
-
-	for _, service := range services.Items {
-		if isHidden(service.Namespace) {
-			continue
-		}
-
-		if len(service.Spec.Selector) == 0 {
-			continue
-		}
-
-		isHeadless := strings.EqualFold(service.Spec.ClusterIP, "None")
-
-		pods, err := client.CoreV1().Pods(service.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: labels.Set(service.Spec.Selector).AsSelector().String(),
-		})
-
-		if err != nil {
-			errinit = multierror.Append(errinit, err)
-			continue
-		}
-
-		if !isHeadless {
-			if pod, ok := primaryPod(pods.Items); ok {
-				ports := portMapping(service, pod)
-
-				if len(ports) == 0 {
-					continue
-				}
-
-				address, err := addressMapping(service.Spec.ClusterIP)
-
-				if err != nil {
-					errinit = multierror.Append(errinit, err)
-					continue
-				}
-
-				hosts := []string{
-					fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
-					fmt.Sprintf("%s.%s", service.Name, service.Namespace),
-				}
-
-				if service.Namespace == options.Scope {
-					hosts = append(hosts, service.Name)
-				}
-
-				tunnels = append(tunnels, tunnel{
-					Pod: pod,
-
-					Hosts: hosts,
-
-					Address: address,
-					Ports:   ports,
-				})
-			}
-		} else {
-			for _, pod := range pods.Items {
-				ports := portMapping(service, pod)
-
-				if len(ports) == 0 {
-					continue
-				}
-
-				if pod.Status.PodIP == "" {
-					continue
-				}
-
-				address, err := addressMapping(pod.Status.PodIP)
-
-				if err != nil {
-					errinit = multierror.Append(errinit, err)
-					continue
-				}
-
-				hosts := []string{
-					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, pod.Namespace),
-				}
-
-				tunnels = append(tunnels, tunnel{
-					Pod: pod,
-
-					Hosts: hosts,
-
-					Address: address,
-					Ports:   ports,
-				})
-			}
-		}
-	}
-
-	if errinit != nil {
-		return errinit
-	}
-
-	if len(tunnels) == 0 {
-		return errors.New("no services found by filter")
-	}
-
-	sort.Slice(tunnels, func(i, j int) bool {
-		leftHost := tunnels[i].Hosts[0]
-		leftNamesapce := tunnels[i].Pod.Namespace
-
-		rightHost := tunnels[j].Hosts[0]
-		rightNamespace := tunnels[j].Pod.Namespace
-
-		if leftNamesapce < rightNamespace {
-			return true
-		}
-
-		if leftNamesapce > rightNamespace {
-			return false
-		}
-
-		if leftHost < rightHost {
-			return true
-		}
-
-		if leftHost > rightHost {
-			return false
-		}
-
-		return false
-	})
-
-	rows := make([][]string, 0)
-	keys := []string{"Namespace", "FQDN", "Ports"}
-
-	for _, tunnel := range tunnels {
-		ports := make([]string, 0)
-
-		for port := range tunnel.Ports {
-			ports = append(ports, port)
-		}
-
-		rows = append(rows, []string{tunnel.Pod.Namespace, tunnel.Hosts[0], strings.Join(ports, ", ")})
-	}
-
-	cli.Table(keys, rows)
-
-	var errsetup error
-
+func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
 	hostsfile, err := goodhosts.NewHosts("Loop")
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	return &Catapult{
+		client:  client,
+		options: options,
+
+		hostsfile: hostsfile,
+	}, nil
+}
+
+func (c *Catapult) Start(ctx context.Context) error {
 	defer func() {
-		hostsfile.Load()
-		hostsfile.RemoveSection()
-		hostsfile.Flush()
+		c.hostsfile.Load()
+
+		for _, t := range c.tunnels {
+			system.UnaliasIP(context.Background(), t.address)
+			c.hostsfile.Remove(t.address, t.hosts...)
+		}
+
+		c.hostsfile.RemoveSection()
+		c.hostsfile.Flush()
 	}()
 
-	for _, tunnel := range tunnels {
-		if err := hostsfile.Add(tunnel.Address, "", tunnel.Hosts...); err != nil {
-			errsetup = multierror.Append(errsetup, err)
-			continue
+	for {
+		if err := ctx.Err(); err != nil {
+			break
 		}
 
-		if err := aliasIP(ctx, tunnel.Address); err != nil {
-			errsetup = multierror.Append(errsetup, err)
-			continue
+		if err := c.Refresh(ctx); err != nil {
+			println(err.Error())
 		}
 
-		defer unaliasIP(context.Background(), tunnel.Address)
+		time.Sleep(10 * time.Second)
 	}
-
-	if err := hostsfile.Flush(); err != nil {
-		return err
-	}
-
-	var errtunnel error
-
-	for _, t := range tunnels {
-		tunnel := t
-
-		go func() {
-			for {
-				err = forward(ctx, client, tunnel.Pod.Namespace, tunnel.Pod.Name, tunnel.Address, tunnel.Ports, nil)
-
-				if err != nil {
-					errtunnel = multierror.Append(errtunnel, err)
-					return
-				}
-
-				if ctx.Err() != nil {
-					break
-				}
-
-				time.Sleep(5 * time.Second)
-			}
-		}()
-	}
-
-	<-ctx.Done()
 
 	return nil
 }
 
-func isHidden(namespace string) bool {
-	return false
-}
+func (c *Catapult) Refresh(ctx context.Context) error {
+	log := logr.FromContextOrDiscard(ctx)
 
-func primaryPod(candidates []corev1.Pod) (corev1.Pod, bool) {
-	for _, pod := range candidates {
-		if pod.Status.Phase == corev1.PodRunning {
-			return pod, true
+	tunnels, err := c.listTunnel(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	if err := c.hostsfile.Load(); err != nil {
+		return err
+	}
+
+	var result error
+
+	// remove unused tunnels
+	for _, i := range c.tunnels {
+		tunnel := i
+		removed := true
+
+		for _, r := range tunnels {
+			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+				removed = false
+				break
+			}
+		}
+
+		if removed {
+			log.Info("removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
+
+			tunnel.Stop()
+
+			if err := system.UnaliasIP(ctx, tunnel.address); err != nil {
+				result = multierror.Append(result, err)
+				continue
+			}
+
+			if err := c.hostsfile.Remove(tunnel.address, tunnel.hosts...); err != nil {
+				result = multierror.Append(result, err)
+				continue
+			}
 		}
 	}
 
-	return corev1.Pod{}, false
-}
+	// add new tunnels
+	for _, i := range tunnels {
+		tunnel := i
+		added := true
 
-func addressMapping(ip string) (string, error) {
-	parts := strings.Split(ip, ".")
+		for _, r := range c.tunnels {
+			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+				added = false
+				break
+			}
+		}
 
-	if len(parts) != 4 {
-		return "", errors.New("invalid pod ip")
+		if added {
+			log.Info("adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
+
+			if err := system.AliasIP(ctx, tunnel.address); err != nil {
+				result = multierror.Append(result, err)
+				continue
+			}
+
+			if err := c.hostsfile.Add(tunnel.address, "", tunnel.hosts...); err != nil {
+				result = multierror.Append(result, err)
+				continue
+			}
+
+			if err := tunnel.Start(ctx, nil); err != nil {
+				result = multierror.Append(result, err)
+				continue
+			}
+		}
 	}
 
-	parts[0] = "127"
-	return strings.Join(parts, "."), nil
+	c.tunnels = tunnels
+
+	if err := c.hostsfile.Flush(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
-	ports := make(map[string]string)
+func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
+	tunnels := make([]*tunnel, 0)
+
+	services, err := c.client.CoreV1().Services(c.options.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: c.options.Selector,
+	})
+
+	if err != nil {
+		return tunnels, err
+	}
+
+	pods, err := c.client.CoreV1().Pods(c.options.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: c.options.Selector,
+	})
+
+	if err != nil {
+		return tunnels, err
+	}
+
+	for _, service := range services.Items {
+		selector := labels.SelectorFromSet(service.Labels)
+
+		pods := selectPods(pods.Items, selector)
+
+		if len(pods) == 0 {
+			continue
+		}
+
+		if service.Spec.ClusterIP != corev1.ClusterIPNone {
+			// Normal Services
+			pod := pods[0]
+
+			address := mapAddress(pod.Status.PodIP)
+			ports := selectPorts(service, pod.Spec.Containers...)
+
+			hosts := []string{
+				fmt.Sprintf("%s.%s", service.Name, service.Namespace),
+				fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
+			}
+
+			if service.Namespace == c.options.Scope {
+				hosts = append([]string{service.Name}, hosts...)
+			}
+
+			tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
+		} else {
+			// Headless Services
+			for _, pod := range pods {
+				address := mapAddress(pod.Status.PodIP)
+				ports := selectPorts(service, pod.Spec.Containers...)
+
+				hosts := []string{
+					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, service.Namespace),
+				}
+
+				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
+			}
+		}
+	}
+
+	return tunnels, nil
+}
+
+func selectPods(pods []corev1.Pod, selector labels.Selector) []corev1.Pod {
+	var result []corev1.Pod
+
+	for _, pod := range pods {
+		// skip non-runing pods
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		labels := labels.Set(pod.Labels)
+
+		// filter pods by selector
+		if !selector.Matches(labels) {
+			continue
+		}
+
+		result = append(result, pod)
+	}
+
+	return result
+}
+
+func selectPorts(service corev1.Service, containers ...corev1.Container) map[int]int {
+	ports := make(map[int]int)
 
 	for _, port := range service.Spec.Ports {
 		servicePort := int(port.Port)
@@ -290,8 +259,8 @@ func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
 			continue
 		}
 
-		for _, container := range pod.Spec.Containers {
-			for _, p := range container.Ports {
+		for _, c := range containers {
+			for _, p := range c.Ports {
 				if p.Name != "" && p.Name == port.TargetPort.String() {
 					containerPort = int(p.ContainerPort)
 				}
@@ -303,68 +272,23 @@ func portMapping(service corev1.Service, pod corev1.Pod) map[string]string {
 		}
 
 		if servicePort > 0 && containerPort > 0 {
-			ports[strconv.Itoa(servicePort)] = strconv.Itoa(containerPort)
+			ports[servicePort] = containerPort
 		}
 	}
 
 	return ports
 }
 
-func aliasIP(ctx context.Context, alias string) error {
-	if runtime.GOOS == "darwin" {
-		ifconfig := exec.CommandContext(ctx, "ifconfig", "lo0", "alias", alias)
+func mapAddress(address string) string {
+	h := md5.New()
+	io.WriteString(h, address)
 
-		if err := ifconfig.Run(); err != nil {
-			if ee, ok := err.(*exec.ExitError); ok {
-				cli.Info(string(ee.Stderr))
-			}
-		}
-	}
+	addr := h.Sum(nil)
 
-	return nil
-}
+	addr = addr[:4]
+	addr[0] = 127
+	addr[1] = 244
 
-func unaliasIP(ctx context.Context, alias string) error {
-	if runtime.GOOS == "darwin" {
-		ifconfig := exec.CommandContext(ctx, "ifconfig", "lo0", "-alias", alias)
-
-		if err := ifconfig.Run(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func forward(ctx context.Context, client kubernetes.Client, namespace, name, address string, ports map[string]string, readyChan chan struct{}) error {
-	if address == "" {
-		address = "localhost"
-	}
-
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, name)
-
-	host := client.Config().Host
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimPrefix(host, "https://")
-
-	transport, upgrader, err := spdy.RoundTripperFor(client.Config())
-
-	if err != nil {
-		return err
-	}
-
-	mappings := make([]string, 0)
-
-	for s, t := range ports {
-		mappings = append(mappings, fmt.Sprintf("%s:%s", s, t))
-	}
-
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, &url.URL{Scheme: "https", Path: path, Host: host})
-	forwarder, err := portforward.NewOnAddresses(dialer, []string{address}, mappings, ctx.Done(), readyChan, ioutil.Discard, ioutil.Discard)
-
-	if err != nil {
-		return err
-	}
-
-	return forwarder.ForwardPorts()
+	ip := net.IP(addr)
+	return ip.String()
 }

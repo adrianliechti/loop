@@ -7,20 +7,23 @@ import (
 	"syscall"
 
 	"github.com/adrianliechti/loop/app/application"
-	"github.com/adrianliechti/loop/app/catapult"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/expose"
-	"github.com/adrianliechti/loop/app/proxy"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/pkg/cli"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 )
 
 var version string
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
+
+	ctx = logr.NewContext(ctx, stdr.New(nil))
 
 	app := initApp()
 
@@ -40,8 +43,6 @@ func initApp() cli.App {
 			application.Command,
 
 			connect.Command,
-			catapult.Command,
-			proxy.Command,
 
 			dashboard.Command,
 

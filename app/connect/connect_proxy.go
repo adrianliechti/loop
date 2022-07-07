@@ -1,24 +1,25 @@
-package proxy
+package connect
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var Command = &cli.Command{
+var proxyCommand = &cli.Command{
 	Name:  "proxy",
-	Usage: "Proxy Kubernetes network (SOCKS5)",
+	Usage: "connect network using socks container",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
@@ -43,6 +44,10 @@ func runProxy(ctx context.Context, client kubernetes.Client, namespace string, p
 	name := "loop-proxy-" + uuid.New().String()[0:7]
 
 	defer func() {
+		if err := system.ResetSocksProxy(); err != nil {
+			cli.Error("unable to reset system proxy", err)
+		}
+
 		cli.Infof("Stopping proxy pod (%s/%s)...", namespace, name)
 		deleteProxy(context.Background(), client, namespace, name)
 	}()
@@ -62,6 +67,10 @@ func runProxy(ctx context.Context, client kubernetes.Client, namespace string, p
 
 	go func() {
 		<-ready
+
+		if err := system.SetSocksProxy("localhost", strconv.Itoa(port)); err != nil {
+			cli.Error("unable to configure system proxy", err)
+		}
 
 		cli.Infof("export http_proxy=socks5h://localhost:%d", port)
 		cli.Infof("export https_proxy=socks5h://localhost:%d", port)
@@ -91,17 +100,6 @@ func createProxy(ctx context.Context, client kubernetes.Client, namespace, name 
 				{
 					Name:  "proxy",
 					Image: "adrianliechti/loop-socks:0",
-
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("64Mi"),
-						},
-					},
 				},
 			},
 		},

@@ -1,4 +1,4 @@
-package catapult
+package connect
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"github.com/adrianliechti/loop/pkg/to"
 )
 
-var Command = &cli.Command{
+var catapultCommand = &cli.Command{
 	Name:  "catapult",
-	Usage: "connect Kubernetes services",
+	Usage: "connect services using port bulk-forwarding",
 
 	Flags: []cli.Flag{
 		app.ScopeFlag,
@@ -28,12 +28,10 @@ var Command = &cli.Command{
 		scope := app.Scope(c)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
-		}
-
-		if scope == nil {
-			scope = namespace
+		if namespace != nil {
+			if scope == nil {
+				scope = namespace
+			}
 		}
 
 		elevated, err := system.IsElevated()
@@ -45,6 +43,7 @@ var Command = &cli.Command{
 		if !elevated {
 			args := []string{
 				os.Args[0],
+				"connect",
 				"catapult",
 			}
 
@@ -67,13 +66,27 @@ var Command = &cli.Command{
 			os.Exit(0)
 		}
 
-		return startCatapult(c.Context, client, *namespace, *scope)
+		return startCatapult(c.Context, client, namespace, scope)
 	},
 }
 
-func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope string) error {
-	return catapult.Start(ctx, client, catapult.CatapultOptions{
-		Scope:     scope,
-		Namespace: namespace,
+func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope *string) error {
+	if namespace == nil {
+		namespace = to.StringPtr("")
+	}
+
+	if scope == nil {
+		scope = to.StringPtr(client.Namespace())
+	}
+
+	catapult, err := catapult.New(client, catapult.CatapultOptions{
+		Scope:     *scope,
+		Namespace: *namespace,
 	})
+
+	if err != nil {
+		return err
+	}
+
+	return catapult.Start(ctx)
 }
