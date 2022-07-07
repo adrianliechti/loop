@@ -253,7 +253,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 
 	args := []string{
 		"-q",
-		"-l", "root",
+		"-l", "loop",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "ProxyCommand=" + kubectl + " exec -i -n " + namespace + " " + name + " --kubeconfig " + client.ConfigPath() + "  -- nc 127.0.0.1 22",
