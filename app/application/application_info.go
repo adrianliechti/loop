@@ -23,26 +23,29 @@ var infoCommand = &cli.Command{
 	Usage: "fetch application info",
 
 	Flags: []cli.Flag{
+		app.NameFlag,
 		app.NamespaceFlag,
 		app.KubeconfigFlag,
-		&cli.StringFlag{
-			Name:     "name",
-			Usage:    "application name",
-			Required: true,
-		},
 	},
 
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		name := app.MustName(c)
+		name := app.Name(c)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
+		if name != nil && namespace == nil {
 			namespace = to.StringPtr(client.Namespace())
 		}
 
-		return applicationInfo(c.Context, client, *namespace, name)
+		if name == nil {
+			app := MustApplication(c.Context, client, to.String(namespace))
+
+			name = &app.Name
+			namespace = &app.Namespace
+		}
+
+		return applicationInfo(c.Context, client, *namespace, *name)
 	},
 }
 
@@ -126,7 +129,14 @@ func applicationInfo(ctx context.Context, client kubernetes.Client, namespace, n
 				rows := make([][]string, 0)
 
 				for _, port := range container.Ports {
-					rows = append(rows, []string{port.Name, fmt.Sprintf("%d", port.ContainerPort)})
+					portName := port.Name
+					portValue := fmt.Sprintf("%d", port.ContainerPort)
+
+					if portName == "" {
+						portName = portValue
+					}
+
+					rows = append(rows, []string{portName, portValue})
 				}
 
 				cli.Info("")

@@ -21,19 +21,18 @@ var listCommand = &cli.Command{
 
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
-
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
-		}
-
-		return listApplications(c.Context, client, *namespace)
+		return listApplications(c.Context, client, namespace)
 	},
 }
 
-func listApplications(ctx context.Context, client kubernetes.Client, namespace string) error {
-	apps, err := resource.Apps(ctx, client, namespace)
+func listApplications(ctx context.Context, client kubernetes.Client, namespace *string) error {
+	if namespace == nil {
+		namespace = to.StringPtr("")
+	}
+
+	apps, err := resource.Apps(ctx, client, *namespace)
 
 	if err != nil {
 		return err

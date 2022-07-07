@@ -19,26 +19,29 @@ var logCommand = &cli.Command{
 	Usage: "stream application logs",
 
 	Flags: []cli.Flag{
+		app.NameFlag,
 		app.NamespaceFlag,
 		app.KubeconfigFlag,
-		&cli.StringFlag{
-			Name:     "name",
-			Usage:    "application name",
-			Required: true,
-		},
 	},
 
 	Action: func(c *cli.Context) error {
 		client := app.MustClient(c)
 
-		name := app.MustName(c)
+		name := app.Name(c)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
+		if name != nil && namespace == nil {
 			namespace = to.StringPtr(client.Namespace())
 		}
 
-		return applicationLogs(c.Context, client, *namespace, name)
+		if name == nil {
+			app := MustApplication(c.Context, client, to.String(namespace))
+
+			name = &app.Name
+			namespace = &app.Namespace
+		}
+
+		return applicationLogs(c.Context, client, *namespace, *name)
 	},
 }
 
