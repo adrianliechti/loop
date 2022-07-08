@@ -34,11 +34,11 @@ var dockerCommand = &cli.Command{
 		port := app.MustRandomPort(c, 2375)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
+		if namespace == "" {
+			namespace = client.Namespace()
 		}
 
-		return connectDaemon(c.Context, client, *namespace, port)
+		return connectDaemon(c.Context, client, namespace, port)
 	},
 }
 

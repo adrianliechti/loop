@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var NameFlag = &cli.StringFlag{
@@ -12,18 +11,18 @@ var NameFlag = &cli.StringFlag{
 	Usage: "name",
 }
 
-func Name(c *cli.Context) *string {
+func Name(c *cli.Context) string {
 	value := c.String(NameFlag.Name)
 
 	if value == "" {
-		return nil
+		return ""
 	}
 
-	return to.StringPtr(value)
+	return value
 }
 
 func MustName(c *cli.Context) string {
-	value := to.String(Name(c))
+	value := Name(c)
 
 	if value == "" {
 		cli.Fatal(errors.New("name missing"))
@@ -37,18 +36,18 @@ var NamespaceFlag = &cli.StringFlag{
 	Usage: "namespace scope for this request",
 }
 
-func Namespace(c *cli.Context) *string {
+func Namespace(c *cli.Context) string {
 	value := c.String(NamespaceFlag.Name)
 
 	if value == "" {
-		return nil
+		return ""
 	}
 
-	return to.StringPtr(value)
+	return value
 }
 
 func MustNamespace(c *cli.Context) string {
-	value := to.String(Namespace(c))
+	value := Namespace(c)
 
 	if value == "" {
 		cli.Fatal(errors.New("namespace missing"))
@@ -62,18 +61,18 @@ var ScopeFlag = &cli.StringFlag{
 	Usage: "scope",
 }
 
-func Scope(c *cli.Context) *string {
+func Scope(c *cli.Context) string {
 	value := c.String(ScopeFlag.Name)
 
 	if value == "" {
-		return nil
+		return ""
 	}
 
-	return to.StringPtr(value)
+	return value
 }
 
 func MustScope(c *cli.Context) string {
-	value := to.String(Scope(c))
+	value := Scope(c)
 
 	if value == "" {
 		cli.Fatal(errors.New("scope missing"))

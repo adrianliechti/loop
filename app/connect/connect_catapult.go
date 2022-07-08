@@ -9,7 +9,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/kubernetes/catapult"
 	"github.com/adrianliechti/loop/pkg/system"
-	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var catapultCommand = &cli.Command{
@@ -28,12 +27,6 @@ var catapultCommand = &cli.Command{
 		scope := app.Scope(c)
 		namespace := app.Namespace(c)
 
-		if namespace != nil {
-			if scope == nil {
-				scope = namespace
-			}
-		}
-
 		elevated, err := system.IsElevated()
 
 		if err != nil {
@@ -47,12 +40,12 @@ var catapultCommand = &cli.Command{
 				"catapult",
 			}
 
-			if namespace != nil && len(*namespace) > 0 {
-				args = append(args, "--"+app.NamespaceFlag.Name, *namespace)
+			if namespace != "" {
+				args = append(args, "--"+app.NamespaceFlag.Name, namespace)
 			}
 
-			if scope != nil && len(*scope) > 0 {
-				args = append(args, "--"+app.ScopeFlag.Name, *scope)
+			if scope != "" {
+				args = append(args, "--"+app.ScopeFlag.Name, scope)
 			}
 
 			args = append(args, "--kubeconfig", client.ConfigPath())
@@ -70,18 +63,18 @@ var catapultCommand = &cli.Command{
 	},
 }
 
-func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope *string) error {
-	if namespace == nil {
-		namespace = to.StringPtr("")
+func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope string) error {
+	if scope == "" {
+		scope = namespace
 	}
 
-	if scope == nil {
-		scope = to.StringPtr(client.Namespace())
+	if scope == "" {
+		scope = client.Namespace()
 	}
 
 	catapult, err := catapult.New(client, catapult.CatapultOptions{
-		Scope:     *scope,
-		Namespace: *namespace,
+		Scope:     scope,
+		Namespace: namespace,
 	})
 
 	if err != nil {

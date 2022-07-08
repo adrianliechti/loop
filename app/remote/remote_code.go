@@ -10,7 +10,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
-	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var codeCommand = &cli.Command{
@@ -43,11 +42,11 @@ var codeCommand = &cli.Command{
 		port := app.MustPortOrRandom(c, 3000)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
+		if namespace == "" {
+			namespace = client.Namespace()
 		}
 
-		return runCode(c.Context, client, port, *namespace, path, nil)
+		return runCode(c.Context, client, port, namespace, path, nil)
 	},
 }
 

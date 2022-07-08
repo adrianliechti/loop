@@ -32,11 +32,11 @@ var proxyCommand = &cli.Command{
 		port := app.MustRandomPort(c, 1080)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
+		if namespace == "" {
+			namespace = client.Namespace()
 		}
 
-		return runProxy(c.Context, client, *namespace, port)
+		return runProxy(c.Context, client, namespace, port)
 	},
 }
 

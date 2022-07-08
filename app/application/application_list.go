@@ -7,7 +7,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/kubernetes/resource"
-	"github.com/adrianliechti/loop/pkg/to"
 )
 
 var listCommand = &cli.Command{
@@ -27,12 +26,8 @@ var listCommand = &cli.Command{
 	},
 }
 
-func listApplications(ctx context.Context, client kubernetes.Client, namespace *string) error {
-	if namespace == nil {
-		namespace = to.StringPtr("")
-	}
-
-	apps, err := resource.Apps(ctx, client, *namespace)
+func listApplications(ctx context.Context, client kubernetes.Client, namespace string) error {
+	apps, err := resource.Apps(ctx, client, namespace)
 
 	if err != nil {
 		return err

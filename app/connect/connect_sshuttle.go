@@ -32,11 +32,11 @@ var sshuttleCommand = &cli.Command{
 		client := app.MustClient(c)
 		namespace := app.Namespace(c)
 
-		if namespace == nil {
-			namespace = to.StringPtr(client.Namespace())
+		if namespace == "" {
+			namespace = client.Namespace()
 		}
 
-		return runShuttle(c.Context, client, *namespace)
+		return runShuttle(c.Context, client, namespace)
 	},
 }
 
