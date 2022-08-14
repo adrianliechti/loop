@@ -2,7 +2,7 @@
 
 ## Installation
 
-#### MacOS
+#### MacOS / Linux
 
 [Homebrew](https://brew.sh)
 
@@ -16,5 +16,5 @@ brew install adrianliechti/tap/loop
 
 ```shell
 scoop bucket add adrianliechti https://github.com/adrianliechti/scoop-bucket
-scoop install adrianliechti/loop
+scoop install kubectl adrianliechti/loop
 ```
