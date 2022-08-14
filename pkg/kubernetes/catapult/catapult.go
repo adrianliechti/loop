@@ -183,7 +183,11 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	}
 
 	for _, service := range services.Items {
-		selector := labels.SelectorFromSet(service.Labels)
+		if len(service.Spec.Selector) == 0 {
+			continue
+		}
+
+		selector := labels.SelectorFromSet(service.Spec.Selector)
 
 		pods := selectPods(pods.Items, selector)
 
