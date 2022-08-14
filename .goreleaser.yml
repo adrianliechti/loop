@@ -14,7 +14,7 @@ builds:
       - arm64
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 changelog:
   sort: asc
@@ -31,3 +31,12 @@ brews:
     commit_author:
       name: Adrian Liechti
       email: adrian@localhost
+
+scoop:
+  bucket:
+    owner: adrianliechti
+    name: scoop-bucket
+
+  commit_author:
+    name: Adrian Liechti
+    email: adrian@localhost

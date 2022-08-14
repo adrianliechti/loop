@@ -13,12 +13,20 @@
 - Some networking features will ask for root/sudo permissions
 
 
-## Install
+#### MacOS
 
-Homebrew
+[Homebrew](https://brew.sh)
 
 ```
 brew install adrianliechti/tap/loop
+```
+
+#### Windows
+
+[Scoop](https://scoop.sh)
+
+```shell
+scoop install https://raw.githubusercontent.com/adrianliechti/scoop-bucket/main/loop.json
 ```
 
 
