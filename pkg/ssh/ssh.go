@@ -18,15 +18,11 @@ var (
 	errOutdated = errors.New("ssh is outdated. please upgrade")
 )
 
-func Tool(ctx context.Context) (string, *semver.Version, error) {
-	if path, version, err := Path(ctx); err == nil {
-		return path, version, err
-	}
-
-	return "", nil, errNotFound
+func Info(ctx context.Context) (string, *semver.Version, error) {
+	return path(ctx)
 }
 
-func Path(ctx context.Context) (string, *semver.Version, error) {
+func path(ctx context.Context) (string, *semver.Version, error) {
 	name := "ssh"
 
 	if runtime.GOOS == "windows" {

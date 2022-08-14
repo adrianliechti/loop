@@ -41,13 +41,13 @@ var sshuttleCommand = &cli.Command{
 }
 
 func runShuttle(ctx context.Context, client kubernetes.Client, namespace string) error {
-	kubectl, _, err := kubectl.Tool(ctx)
+	kubectl, _, err := kubectl.Info(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	sshuttle, _, err := sshuttle.Tool(ctx)
+	sshuttle, _, err := sshuttle.Info(ctx)
 
 	if err != nil {
 		return err

@@ -105,7 +105,7 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 }
 
 func startServer(ctx context.Context, path string, port int) (string, error) {
-	tool, _, err := docker.Tool(ctx)
+	tool, _, err := docker.Info(ctx)
 
 	if err != nil {
 		return "", err
@@ -150,7 +150,7 @@ func startServer(ctx context.Context, path string, port int) (string, error) {
 }
 
 func stopServer(ctx context.Context, container string) error {
-	tool, _, err := docker.Tool(ctx)
+	tool, _, err := docker.Info(ctx)
 
 	if err != nil {
 		return err
@@ -261,13 +261,13 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 }
 
 func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, port int, tunnels map[int]int) error {
-	ssh, _, err := ssh.Tool(ctx)
+	ssh, _, err := ssh.Info(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	kubectl, _, err := kubectl.Tool(ctx)
+	kubectl, _, err := kubectl.Info(ctx)
 
 	if err != nil {
 		return err

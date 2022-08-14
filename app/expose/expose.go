@@ -239,13 +239,13 @@ func deleteTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 }
 
 func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports map[int]int, readyChan chan struct{}) error {
-	ssh, _, err := ssh.Tool(ctx)
+	ssh, _, err := ssh.Info(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	kubectl, _, err := kubectl.Tool(ctx)
+	kubectl, _, err := kubectl.Info(ctx)
 
 	if err != nil {
 		return err

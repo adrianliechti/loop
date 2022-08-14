@@ -41,7 +41,7 @@ func runDashboard(ctx context.Context, client kubernetes.Client, port int) error
 		port = target
 	}
 
-	tool, _, err := docker.Tool(ctx)
+	tool, _, err := docker.Info(ctx)
 
 	if err != nil {
 		return err

@@ -47,7 +47,7 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		namespace = client.Namespace()
 	}
 
-	docker, _, err := docker.Tool(ctx)
+	docker, _, err := docker.Info(ctx)
 
 	if err != nil {
 		return err
