@@ -34,8 +34,10 @@ func main() {
 
 func initApp() cli.App {
 	return cli.App{
+		Usage: "Loop",
+
+		Suggest: true,
 		Version: version,
-		Usage:   "DevOps Loop",
 
 		HideHelpCommand: true,
 
