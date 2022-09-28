@@ -2,9 +2,12 @@ package expose
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -30,8 +33,8 @@ var Command = &cli.Command{
 		app.NamespaceFlag,
 		app.KubeconfigFlag,
 
-		&cli.IntSliceFlag{
-			Name:     app.PortsFlag.Name,
+		&cli.StringSliceFlag{
+			Name:     "port",
 			Usage:    "local port(s) to expose",
 			Required: true,
 		},
@@ -47,19 +50,41 @@ var Command = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		ports := app.MustPorts(c)
+		ports := c.StringSlice("port")
 
-		return createTCPTunnel(c.Context, client, namespace, name, ports)
+		tunnels := map[int]int{}
+
+		for _, p := range ports {
+			pair := strings.Split(p, ":")
+
+			if len(pair) > 2 {
+				return errors.New("invalid port mapping")
+			}
+
+			if len(pair) == 1 {
+				pair = []string{pair[0], pair[0]}
+			}
+
+			source, err := strconv.Atoi(pair[0])
+
+			if err != nil {
+				return err
+			}
+
+			target, err := strconv.Atoi(pair[1])
+
+			if err != nil {
+				return err
+			}
+
+			tunnels[source] = target
+		}
+
+		return createTCPTunnel(c.Context, client, namespace, name, tunnels)
 	},
 }
 
-func createTCPTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports []int) error {
-	mapping := map[int]int{}
-
-	for _, p := range ports {
-		mapping[p] = p
-	}
-
+func createTCPTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, mapping map[int]int) error {
 	options := TunnelOptions{
 		ServiceType:  corev1.ServiceTypeClusterIP,
 		ServicePorts: mapping,
