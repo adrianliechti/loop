@@ -276,14 +276,10 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name st
 	args := []string{
 		"-q",
 		"-t",
-		"-l",
-		"root",
-		"-o",
-		"UserKnownHostsFile=/dev/null",
-		"-o",
-		"StrictHostKeyChecking=no",
-		"-o",
-		fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -c ssh -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
+		"-l", "root",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -c ssh -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
 		"localhost",
 	}
 
