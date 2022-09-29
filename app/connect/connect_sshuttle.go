@@ -55,7 +55,22 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 
 	// Kubeadm: Services CIDR 10.96.0.0/12?, Pod CIDR 172.16.0.0/16?
 	// OpenShift: Services CIDR 172.30.0.0/16, Pod CIDR 10.128.0.0/14
-	cidr := "0.0.0.0/0"
+
+	networks := []string{}
+
+	if cidr, err := client.PodCIDR(ctx); err == nil {
+		println("Pod     CIDR:", cidr)
+		networks = append(networks, cidr)
+	}
+
+	if cidr, err := client.ServiceCIDR(ctx); err == nil {
+		println("Service CIDR:", cidr)
+		networks = append(networks, cidr)
+	}
+
+	if len(networks) == 0 {
+		networks = []string{"0.0.0.0/0"}
+	}
 
 	name := "loop-sshuttle-" + uuid.New().String()[0:7]
 
@@ -72,13 +87,14 @@ func runShuttle(ctx context.Context, client kubernetes.Client, namespace string)
 	}
 
 	args := []string{
-		//"-v",
+		"-v",
 		"--method", "auto",
 		"--dns", "--to-ns=127.0.0.1",
 		"-r", "loop@localhost",
 		"-e", kubectl + " exec -i " + pod.Name + " -n " + pod.Namespace + " -c sshuttle --kubeconfig " + client.ConfigPath() + " -- ssh",
-		cidr,
 	}
+
+	args = append(args, networks...)
 
 	cmd := exec.CommandContext(ctx, sshuttle, args...)
 	cmd.Stdin = os.Stdin
@@ -103,10 +119,14 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 				{
 					Name:  "sshuttle",
 					Image: "adrianliechti/loop-tunnel:0",
+
+					ImagePullPolicy: corev1.PullAlways,
 				},
 				{
 					Name:  "dns",
 					Image: "adrianliechti/loop-dns:0",
+
+					ImagePullPolicy: corev1.PullAlways,
 				},
 			},
 		},

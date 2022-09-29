@@ -20,6 +20,9 @@ type Client interface {
 	Config() *rest.Config
 	Namespace() string
 
+	PodCIDR(ctx context.Context) (string, error)
+	ServiceCIDR(ctx context.Context) (string, error)
+
 	ServicePods(ctx context.Context, namespace, name string) ([]corev1.Pod, error)
 	ServicePod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
 	ServiceAddress(ctx context.Context, namespace, name string) (string, error)

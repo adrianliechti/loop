@@ -64,6 +64,11 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	if msg.Rcode == dns.RcodeSuccess {
+		log.WithFields(log.Fields{
+			"name": r.Question[0].Name,
+			"type": r.Question[0].Qtype,
+		}).Info("handled")
+
 		w.WriteMsg(msg)
 		return
 	}
@@ -89,6 +94,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				})
 			}
 		}
+	} else {
+		log.Error("multiple questions not supported")
 	}
 
 	w.WriteMsg(msg)
