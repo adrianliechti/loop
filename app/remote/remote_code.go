@@ -208,7 +208,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DOCKER_HOST",
-							Value: "unix:///var/run/dind/docker.sock",
+							Value: "tcp://127.0.0.1:2375",
 						},
 					},
 
@@ -225,10 +225,6 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 							Name:             "mnt",
 							MountPath:        "/mnt",
 							MountPropagation: &mountPropagationHostToContainer,
-						},
-						{
-							Name:      "dind",
-							MountPath: "/var/run/dind",
 						},
 					},
 				},
@@ -252,8 +248,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 					Args: []string{
 						"--group",
 						"1000",
-						"--host",
-						"unix:///var/run/dind/docker.sock",
+						"--tls=false",
 					},
 
 					VolumeMounts: []corev1.VolumeMount{
@@ -262,10 +257,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 							MountPath:        "/mnt",
 							MountPropagation: &mountPropagationHostToContainer,
 						},
-						{
-							Name:      "dind",
-							MountPath: "/var/run/dind",
-						},
+
 						{
 							Name:      "docker",
 							MountPath: "/var/lib/docker",
@@ -300,12 +292,6 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 			Volumes: []corev1.Volume{
 				{
 					Name: "mnt",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "dind",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},

@@ -137,6 +137,10 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 						},
 					},
 
+					Args: []string{
+						"--tls=false",
+					},
+
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "docker",
