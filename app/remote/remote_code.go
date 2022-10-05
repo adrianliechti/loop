@@ -163,7 +163,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 		return "", err
 	}
 
-	pod := &corev1.Pod{
+	if _, err := client.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -186,8 +186,9 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:             "mnt",
-							MountPath:        "/mnt",
+							Name:      "mnt",
+							MountPath: "/mnt",
+
 							MountPropagation: &mountPropagationHostToContainer,
 						},
 					},
@@ -222,8 +223,9 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:             "mnt",
-							MountPath:        "/mnt",
+							Name:      "mnt",
+							MountPath: "/mnt",
+
 							MountPropagation: &mountPropagationHostToContainer,
 						},
 					},
@@ -253,8 +255,9 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:             "mnt",
-							MountPath:        "/mnt",
+							Name:      "mnt",
+							MountPath: "/mnt",
+
 							MountPropagation: &mountPropagationHostToContainer,
 						},
 
@@ -314,19 +317,15 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 			TerminationGracePeriodSeconds: to.Int64Ptr(10),
 		},
-	}
-
-	pod, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-
-	if err != nil {
+	}, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 
-	if _, err := client.WaitForPod(ctx, pod.Namespace, pod.Name); err != nil {
+	if _, err := client.WaitForPod(ctx, namespace, name); err != nil {
 		return "", err
 	}
 
-	return pod.Name, nil
+	return name, nil
 }
 
 func stopCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name string) error {

@@ -114,7 +114,7 @@ func daemonLabels(name string) map[string]string {
 func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name string) (*corev1.Pod, error) {
 	labels := daemonLabels(name)
 
-	pod := &corev1.Pod{
+	if _, err := client.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
 			Labels: labels,
@@ -182,9 +182,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 
 			TerminationGracePeriodSeconds: to.Int64Ptr(10),
 		},
-	}
-
-	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+	}, metav1.CreateOptions{}); err != nil {
 		return nil, err
 	}
 
