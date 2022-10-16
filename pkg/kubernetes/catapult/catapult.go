@@ -191,29 +191,29 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 
 		pods := selectPods(pods.Items, selector)
 
-		if len(pods) == 0 {
-			continue
-		}
-
 		if service.Spec.ClusterIP != corev1.ClusterIPNone {
 			// Normal Services
-			pod := pods[0]
 
-			address := mapAddress(pod.Status.PodIP)
-			ports := selectPorts(service, pod.Spec.Containers...)
+			if len(pods) > 0 {
+				pod := pods[0]
 
-			hosts := []string{
-				fmt.Sprintf("%s.%s", service.Name, service.Namespace),
-				fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
+				address := mapAddress(pod.Status.PodIP)
+				ports := selectPorts(service, pod.Spec.Containers...)
+
+				hosts := []string{
+					fmt.Sprintf("%s.%s", service.Name, service.Namespace),
+					fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
+				}
+
+				if service.Namespace == c.options.Scope {
+					hosts = append([]string{service.Name}, hosts...)
+				}
+
+				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 			}
-
-			if service.Namespace == c.options.Scope {
-				hosts = append([]string{service.Name}, hosts...)
-			}
-
-			tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 		} else {
 			// Headless Services
+
 			for _, pod := range pods {
 				address := mapAddress(pod.Status.PodIP)
 				ports := selectPorts(service, pod.Spec.Containers...)
