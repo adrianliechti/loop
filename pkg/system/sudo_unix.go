@@ -44,6 +44,7 @@ func RunElevated() error {
 
 	cmd := exec.Command("sudo", args...)
 	cmd.Dir = cwd
+	cmd.Env = os.Environ()
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
