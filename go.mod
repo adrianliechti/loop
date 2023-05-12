@@ -5,19 +5,19 @@ go 1.20
 require (
 	github.com/ChrisWiegman/goodhosts/v4 v4.1.0
 	github.com/Masterminds/semver v1.5.0
-	github.com/go-logr/logr v1.2.3
+	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	github.com/urfave/cli/v2 v2.25.0
-	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.6.0
-	k8s.io/api v0.26.3
-	k8s.io/apimachinery v0.26.3
-	k8s.io/client-go v0.26.3
+	github.com/urfave/cli/v2 v2.25.3
+	golang.org/x/sync v0.2.0
+	golang.org/x/sys v0.8.0
+	k8s.io/api v0.27.1
+	k8s.io/apimachinery v0.27.1
+	k8s.io/client-go v0.27.1
 )
 
 require (
