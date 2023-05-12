@@ -62,7 +62,7 @@ func (c *client) ServiceAddress(ctx context.Context, namespace, name string) (st
 }
 
 func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
-	timeout := time.After(120 * time.Second)
+	timeout := time.After(300 * time.Second)
 	ticker := time.NewTicker(5 * time.Second)
 
 LOOP:
@@ -103,7 +103,7 @@ LOOP:
 }
 
 func (c *client) WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
-	timeout := time.After(120 * time.Second)
+	timeout := time.After(300 * time.Second)
 	ticker := time.NewTicker(5 * time.Second)
 
 	for {
