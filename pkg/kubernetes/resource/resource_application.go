@@ -8,30 +8,51 @@ import (
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 
+	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 type Application struct {
 	Name      string
 	Namespace string
 
-	Resources []ApplicationResource
+	Version string
+
+	Labels    map[string]string
+	Resources []Resource
 }
 
-type ApplicationResource struct {
-	Kind   string
-	Object interface{}
+type Resource struct {
+	Category string
+
+	Kind string
 
 	Name      string
 	Namespace string
 
-	Labels      map[string]interface{}
-	Annotations map[string]interface{}
+	Version string
+
+	Labels      map[string]string
+	Annotations map[string]string
+
+	Status ResourceStatus
+	Object interface{}
 }
+
+type ResourceStatus string
+
+const (
+	StatusPending   ResourceStatus = "Pending"
+	StatusRunning   ResourceStatus = "Running"
+	StatusSucceeded ResourceStatus = "Succeeded"
+	StatusFailed    ResourceStatus = "Failed"
+	StatusUnknown   ResourceStatus = ""
+)
 
 func App(ctx context.Context, client kubernetes.Client, namespace, name string) (*Application, error) {
 	applications, err := Apps(ctx, client, namespace)
@@ -57,6 +78,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 	var deployments *appsv1.DeploymentList
 	var statefulsets *appsv1.StatefulSetList
 	var daemonsets *appsv1.DaemonSetList
+	//var replicasets *appsv1.ReplicaSetList
 
 	var pods *corev1.PodList
 	var services *corev1.ServiceList
@@ -110,13 +132,21 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		return err
 	})
 
+	// eg.Go(func() error {
+	// 	var err error
+
+	// 	replicasets, err = client.AppsV1().ReplicaSets(namespace).
+	// 		List(ctx, metav1.ListOptions{})
+
+	// 	return err
+	// })
+
 	eg.Go(func() error {
 		var err error
 
 		ingresses, err = client.NetworkingV1().Ingresses(namespace).
 			List(ctx, metav1.ListOptions{})
 
-		err = nil // ignore ingress list errors for the moment (old clusters)
 		return err
 	})
 
@@ -126,14 +156,12 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 	apps := make(map[string]*Application)
 
-	findApp := func(object metav1.ObjectMeta) *Application {
-		namespace, name, ok := appName(object)
+	findApp := func(object metav1.ObjectMeta, labels map[string]string) *Application {
+		key, namespace, name, ok := appName(object, labels)
 
 		if !ok {
-			return nil
+			slog.InfoCtx(ctx, "missing app labels", "namespace", namespace, "name", name)
 		}
-
-		key := namespace + "/" + name
 
 		if app, ok := apps[key]; ok {
 			return app
@@ -142,187 +170,216 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		app := &Application{
 			Name:      name,
 			Namespace: namespace,
+
+			Labels: appLabels(object, labels),
 		}
 
 		apps[key] = app
-
 		return app
 	}
 
 	for _, daemonset := range daemonsets.Items {
-		app := findApp(daemonset.ObjectMeta)
+		app := findApp(daemonset.ObjectMeta, daemonset.Spec.Template.Labels)
 
 		if app == nil {
 			continue
 		}
 
-		resource := ApplicationResource{
-			Kind:   "DaemonSet",
-			Object: daemonset,
+		resource := Resource{
+			Kind:     "DaemonSet",
+			Category: "Controller",
 
 			Name:      daemonset.Name,
 			Namespace: daemonset.Namespace,
 
-			Labels:      convertMap(daemonset.Labels),
-			Annotations: convertMap(daemonset.Annotations),
+			Version: appVersion(daemonset.ObjectMeta),
+
+			Labels:      filterLabels(daemonset.Labels),
+			Annotations: filterAnnotations(daemonset.Annotations),
+
+			Status: convertDaemonSetStatus(daemonset.Status),
+			Object: daemonset,
 		}
 
 		app.Resources = append(app.Resources, resource)
 	}
 
 	for _, statefulset := range statefulsets.Items {
-		app := findApp(statefulset.ObjectMeta)
+		app := findApp(statefulset.ObjectMeta, statefulset.Spec.Template.Labels)
 
 		if app == nil {
 			continue
 		}
 
-		resource := ApplicationResource{
-			Kind:   "StatefulSet",
-			Object: statefulset,
+		resource := Resource{
+			Kind:     "StatefulSet",
+			Category: "Controller",
 
 			Name:      statefulset.Name,
 			Namespace: statefulset.Namespace,
 
-			Labels:      convertMap(statefulset.Labels),
-			Annotations: convertMap(statefulset.Annotations),
+			Version: appVersion(statefulset.ObjectMeta),
+
+			Labels:      filterLabels(statefulset.Labels),
+			Annotations: filterAnnotations(statefulset.Annotations),
+
+			Status: convertStatefulSetStatus(statefulset.Status),
+			Object: statefulset,
 		}
 
 		app.Resources = append(app.Resources, resource)
 	}
 
 	for _, deployment := range deployments.Items {
-		app := findApp(deployment.ObjectMeta)
+		app := findApp(deployment.ObjectMeta, deployment.Spec.Template.Labels)
 
 		if app == nil {
 			continue
 		}
 
-		resource := ApplicationResource{
-			Kind:   "Deployment",
-			Object: deployment,
+		resource := Resource{
+			Kind:     "Deployment",
+			Category: "Controller",
 
 			Name:      deployment.Name,
 			Namespace: deployment.Namespace,
 
-			Labels:      convertMap(deployment.Labels),
-			Annotations: convertMap(deployment.Annotations),
+			Version: appVersion(deployment.ObjectMeta),
+
+			Labels:      filterLabels(deployment.Labels),
+			Annotations: filterAnnotations(deployment.Annotations),
+
+			Status: convertDeploymentStatus(deployment.Status),
+			Object: deployment,
 		}
 
 		app.Resources = append(app.Resources, resource)
-
 	}
 
 	for _, service := range services.Items {
-		app := findApp(service.ObjectMeta)
-
-		if app == nil {
+		if len(service.Spec.Selector) == 0 {
 			continue
 		}
 
-		resource := ApplicationResource{
-			Kind:   "Service",
-			Object: service,
+		selector := labels.SelectorFromSet(service.Spec.Selector)
+
+		resource := Resource{
+			Kind:     "Service",
+			Category: "Network",
 
 			Name:      service.Name,
 			Namespace: service.Namespace,
+
+			Status: convertServiceStatus(service.Status),
+			Object: service,
 		}
 
-		app.Resources = append(app.Resources, resource)
+		for _, app := range apps {
+			if app.Namespace != service.Namespace {
+				continue
+			}
+
+			var found bool
+
+			for _, r := range app.Resources {
+				if selector.Matches(labels.Set(r.Labels)) {
+					found = true
+				}
+			}
+
+			if !found {
+				continue
+			}
+
+			app.Resources = append(app.Resources, resource)
+		}
 	}
 
 	for _, ingress := range ingresses.Items {
-		app := findApp(ingress.ObjectMeta)
-
-		if app == nil {
-			continue
-		}
-
-		resource := ApplicationResource{
-			Kind:   "Ingress",
-			Object: ingress,
+		resource := Resource{
+			Kind:     "Ingress",
+			Category: "Network",
 
 			Name:      ingress.Name,
 			Namespace: ingress.Namespace,
+
+			Status: convertIngressStatus(ingress.Status),
+			Object: ingress,
 		}
 
-		app.Resources = append(app.Resources, resource)
+		var ingressServices []corev1.Service
+
+		for _, rule := range ingress.Spec.Rules {
+			if rule.IngressRuleValue.HTTP != nil {
+				for _, path := range rule.IngressRuleValue.HTTP.Paths {
+					if path.Backend.Service != nil {
+						for _, service := range services.Items {
+							if service.Namespace != ingress.Namespace {
+								continue
+							}
+
+							if service.Name != path.Backend.Service.Name {
+								continue
+							}
+
+							ingressServices = append(ingressServices, service)
+						}
+					}
+				}
+			}
+		}
+
+		for _, service := range ingressServices {
+			app := findApp(service.ObjectMeta, service.Spec.Selector)
+
+			if app == nil {
+				continue
+			}
+
+			app.Resources = append(app.Resources, resource)
+		}
 	}
 
 	for _, pod := range pods.Items {
-		app := findApp(pod.ObjectMeta)
+		app := findApp(pod.ObjectMeta, pod.Labels)
 
-		if app == nil {
+		if app == nil || len(app.Resources) == 0 {
 			continue
 		}
 
-		resource := ApplicationResource{
-			Kind:   "Pod",
-			Object: pod,
+		resource := Resource{
+			Kind:     "Pod",
+			Category: "Workload",
 
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
+
+			Status: convertPodStatus(pod.Status),
+			Object: pod,
 		}
 
 		app.Resources = append(app.Resources, resource)
 	}
 
-	applications := make([]Application, 0)
+	result := make([]Application, 0)
 
-	for _, a := range apps {
-		app := *a
-		applications = append(applications, app)
+	for _, app := range apps {
+		if len(app.Resources) > 0 {
+			result = append(result, *app)
+		}
 	}
 
-	sort.Slice(applications, func(i, j int) bool {
-		if applications[i].Namespace < applications[j].Namespace {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Namespace < result[j].Namespace {
 			return true
 		}
 
-		if applications[i].Namespace > applications[j].Namespace {
+		if result[i].Namespace > result[j].Namespace {
 			return false
 		}
 
-		return applications[i].Name < applications[j].Name
+		return result[i].Name < result[j].Name
 	})
 
-	return applications, nil
-}
-
-func appName(object metav1.ObjectMeta) (namespace, name string, ok bool) {
-	ok = false
-	name = object.Name
-	namespace = object.Namespace
-
-	appInstance := object.Labels["app.kubernetes.io/instance"]
-
-	labelApp := object.Labels["app"]
-	labelRelease := object.Labels["release"]
-
-	if labelApp != "" {
-		ok = true
-		name = labelApp
-	}
-
-	if labelRelease != "" {
-		ok = true
-		name = labelRelease
-	}
-
-	if appInstance != "" {
-		ok = true
-		name = appInstance
-	}
-
-	return
-}
-
-func convertMap(labels map[string]string) map[string]interface{} {
-	result := map[string]interface{}{}
-
-	for k, v := range labels {
-		result[k] = v
-	}
-
-	return result
+	return result, nil
 }
