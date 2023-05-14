@@ -12,8 +12,8 @@ import (
 	"github.com/adrianliechti/loop/pkg/system"
 
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
-	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
+	"golang.org/x/exp/slog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,8 +79,6 @@ func (c *Catapult) Start(ctx context.Context) error {
 }
 
 func (c *Catapult) Refresh(ctx context.Context) error {
-	log := logr.FromContextOrDiscard(ctx)
-
 	tunnels, err := c.listTunnel(ctx)
 
 	if err != nil {
@@ -106,7 +104,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if removed {
-			log.Info("removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
+			slog.InfoCtx(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
 
 			tunnel.Stop()
 
@@ -135,7 +133,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if added {
-			log.Info("adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
+			slog.InfoCtx(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", tunnel.ports)
 
 			if err := system.AliasIP(ctx, tunnel.address); err != nil {
 				result = multierror.Append(result, err)

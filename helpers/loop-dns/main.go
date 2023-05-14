@@ -2,11 +2,12 @@ package main
 
 import (
 	"errors"
+	"log"
 	"net"
 	"strings"
 
 	"github.com/miekg/dns"
-	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slog"
 )
 
 const (
@@ -64,10 +65,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	if msg.Rcode == dns.RcodeSuccess {
-		log.WithFields(log.Fields{
-			"name": r.Question[0].Name,
-			"type": r.Question[0].Qtype,
-		}).Info("handled")
+		slog.Info("handled", "name", r.Question[0].Name, "type", r.Question[0].Qtype)
 
 		w.WriteMsg(msg)
 		return
@@ -77,10 +75,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	msg.SetReply(r)
 
 	if len(msg.Question) == 1 {
-		log.WithFields(log.Fields{
-			"name": r.Question[0].Name,
-			"type": r.Question[0].Qtype,
-		}).Info("not handled")
+		slog.Info("not handled", "name", r.Question[0].Name, "type", r.Question[0].Qtype)
 
 		if r.Question[0].Qtype == dns.TypeA {
 			name := r.Question[0].Name
@@ -95,7 +90,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			}
 		}
 	} else {
-		log.Error("multiple questions not supported")
+		slog.Error("multiple questions not supported")
 	}
 
 	w.WriteMsg(msg)
@@ -128,9 +123,7 @@ func (s *Server) queryA(name string) (net.IP, error) {
 	}
 
 	for _, d := range domains {
-		log.WithFields(log.Fields{
-			"name": d,
-		}).Info("lookup address")
+		slog.Info("lookup address", "name", d)
 
 		msg := &dns.Msg{}
 
