@@ -233,7 +233,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 				{
 					Name: "docker",
 
-					Image:           "docker:20-dind",
+					Image:           "docker:24-dind-rootless",
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{

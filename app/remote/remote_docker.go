@@ -123,8 +123,10 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:  "docker",
-					Image: "docker:20-dind",
+					Name: "docker",
+
+					Image:           "docker:24-dind-rootless",
+					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: to.BoolPtr(true),
