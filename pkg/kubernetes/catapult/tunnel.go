@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"golang.org/x/exp/slog"
 )
 
 type tunnel struct {
@@ -43,7 +44,7 @@ func (t *tunnel) Start(ctx context.Context, readyChan chan struct{}) error {
 
 	go func() {
 		if err := t.client.PodPortForward(ctx, t.namespace, t.name, t.address, t.ports, readyChan); err != nil {
-			println("failed to forward", err.Error())
+			slog.ErrorCtx(ctx, "failed to forward", "address", t.address, "ports", t.ports, "error", err)
 		}
 	}()
 
