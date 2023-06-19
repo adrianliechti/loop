@@ -11,6 +11,43 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+type Application struct {
+	Name      string
+	Namespace string
+
+	Version string
+
+	Labels    map[string]string
+	Resources []Resource
+}
+
+type Resource struct {
+	Category string
+
+	Kind   string
+	Object interface{}
+
+	Name      string
+	Namespace string
+
+	Version string
+
+	Labels      map[string]string
+	Annotations map[string]string
+
+	Status ResourceStatus
+}
+
+type ResourceStatus string
+
+const (
+	StatusPending   ResourceStatus = "Pending"
+	StatusRunning   ResourceStatus = "Running"
+	StatusSucceeded ResourceStatus = "Succeeded"
+	StatusFailed    ResourceStatus = "Failed"
+	StatusUnknown   ResourceStatus = ""
+)
+
 func appName(object metav1.ObjectMeta, labels map[string]string) (key, namespace, name string, ok bool) {
 	name = object.Name
 	namespace = object.Namespace

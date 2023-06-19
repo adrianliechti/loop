@@ -17,43 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-type Application struct {
-	Name      string
-	Namespace string
-
-	Version string
-
-	Labels    map[string]string
-	Resources []Resource
-}
-
-type Resource struct {
-	Category string
-
-	Kind string
-
-	Name      string
-	Namespace string
-
-	Version string
-
-	Labels      map[string]string
-	Annotations map[string]string
-
-	Status ResourceStatus
-	Object interface{}
-}
-
-type ResourceStatus string
-
-const (
-	StatusPending   ResourceStatus = "Pending"
-	StatusRunning   ResourceStatus = "Running"
-	StatusSucceeded ResourceStatus = "Succeeded"
-	StatusFailed    ResourceStatus = "Failed"
-	StatusUnknown   ResourceStatus = ""
-)
-
 func App(ctx context.Context, client kubernetes.Client, namespace, name string) (*Application, error) {
 	applications, err := Apps(ctx, client, namespace)
 
@@ -78,7 +41,6 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 	var deployments *appsv1.DeploymentList
 	var statefulsets *appsv1.StatefulSetList
 	var daemonsets *appsv1.DaemonSetList
-	//var replicasets *appsv1.ReplicaSetList
 
 	var pods *corev1.PodList
 	var services *corev1.ServiceList
@@ -132,15 +94,6 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		return err
 	})
 
-	// eg.Go(func() error {
-	// 	var err error
-
-	// 	replicasets, err = client.AppsV1().ReplicaSets(namespace).
-	// 		List(ctx, metav1.ListOptions{})
-
-	// 	return err
-	// })
-
 	eg.Go(func() error {
 		var err error
 
@@ -160,7 +113,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		key, namespace, name, ok := appName(object, labels)
 
 		if !ok {
-			slog.InfoCtx(ctx, "missing app labels", "namespace", namespace, "name", name)
+			slog.DebugCtx(ctx, "missing app labels", "namespace", namespace, "name", name)
 		}
 
 		if app, ok := apps[key]; ok {
@@ -187,6 +140,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 		resource := Resource{
 			Kind:     "DaemonSet",
+			Object:   daemonset,
 			Category: "Controller",
 
 			Name:      daemonset.Name,
@@ -198,7 +152,6 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 			Annotations: filterAnnotations(daemonset.Annotations),
 
 			Status: convertDaemonSetStatus(daemonset.Status),
-			Object: daemonset,
 		}
 
 		app.Resources = append(app.Resources, resource)
@@ -213,6 +166,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 		resource := Resource{
 			Kind:     "StatefulSet",
+			Object:   statefulset,
 			Category: "Controller",
 
 			Name:      statefulset.Name,
@@ -224,7 +178,6 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 			Annotations: filterAnnotations(statefulset.Annotations),
 
 			Status: convertStatefulSetStatus(statefulset.Status),
-			Object: statefulset,
 		}
 
 		app.Resources = append(app.Resources, resource)
@@ -239,6 +192,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 		resource := Resource{
 			Kind:     "Deployment",
+			Object:   deployment,
 			Category: "Controller",
 
 			Name:      deployment.Name,
@@ -250,7 +204,6 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 			Annotations: filterAnnotations(deployment.Annotations),
 
 			Status: convertDeploymentStatus(deployment.Status),
-			Object: deployment,
 		}
 
 		app.Resources = append(app.Resources, resource)
@@ -265,13 +218,13 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 		resource := Resource{
 			Kind:     "Service",
+			Object:   service,
 			Category: "Network",
 
 			Name:      service.Name,
 			Namespace: service.Namespace,
 
 			Status: convertServiceStatus(service.Status),
-			Object: service,
 		}
 
 		for _, app := range apps {
@@ -298,13 +251,13 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 	for _, ingress := range ingresses.Items {
 		resource := Resource{
 			Kind:     "Ingress",
+			Object:   ingress,
 			Category: "Network",
 
 			Name:      ingress.Name,
 			Namespace: ingress.Namespace,
 
 			Status: convertIngressStatus(ingress.Status),
-			Object: ingress,
 		}
 
 		var ingressServices []corev1.Service
@@ -349,13 +302,13 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 
 		resource := Resource{
 			Kind:     "Pod",
+			Object:   pod,
 			Category: "Workload",
 
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
 
 			Status: convertPodStatus(pod.Status),
-			Object: pod,
 		}
 
 		app.Resources = append(app.Resources, resource)
