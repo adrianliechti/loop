@@ -14,7 +14,6 @@ import (
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
 	"github.com/hashicorp/go-multierror"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 
 	corev1 "k8s.io/api/core/v1"
@@ -182,9 +181,6 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		return tunnels, err
 	}
 
-	var endpoints []string
-
-SERVICES:
 	for _, service := range services.Items {
 		if len(service.Spec.Selector) == 0 {
 			continue
@@ -200,23 +196,13 @@ SERVICES:
 			if len(pods) > 0 {
 				pod := pods[0]
 
-				address := mapAddress(pod.Status.PodIP)
-				ports := selectPorts(service, pod.Spec.Containers...)
-
-				for p := range ports {
-					ep := fmt.Sprintf("%s:%d", address, p)
-
-					if slices.Contains(endpoints, ep) {
-						continue SERVICES
-					}
-
-					endpoints = append(endpoints, ep)
-				}
-
 				hosts := []string{
 					fmt.Sprintf("%s.%s", service.Name, service.Namespace),
 					fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
 				}
+
+				address := mapAddress(service.Spec.ClusterIP)
+				ports := selectPorts(service, pod.Spec.Containers...)
 
 				if service.Namespace == c.options.Scope {
 					hosts = append([]string{service.Name}, hosts...)
@@ -225,25 +211,14 @@ SERVICES:
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 			}
 		} else {
-		PODS:
 			// Headless Services
 			for _, pod := range pods {
-				address := mapAddress(pod.Status.PodIP)
-				ports := selectPorts(service, pod.Spec.Containers...)
-
-				for p := range ports {
-					ep := fmt.Sprintf("%s:%d", address, p)
-
-					if slices.Contains(endpoints, ep) {
-						continue PODS
-					}
-
-					endpoints = append(endpoints, ep)
-				}
-
 				hosts := []string{
 					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, service.Namespace),
 				}
+
+				address := mapAddress(hosts[0])
+				ports := selectPorts(service, pod.Spec.Containers...)
 
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 			}
