@@ -5,12 +5,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/remote"
 	"github.com/adrianliechti/loop/pkg/cli"
+
+	"github.com/lmittmann/tint"
+	"golang.org/x/exp/slog"
 )
 
 var version string
@@ -18,6 +22,11 @@ var version string
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
+
+	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &tint.Options{
+		Level:      slog.LevelInfo,
+		TimeFormat: time.Kitchen,
+	})))
 
 	app := initApp()
 

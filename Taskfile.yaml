@@ -8,7 +8,7 @@ vars:
 tasks:
   run: go run -ldflags "-X main.version={{.VERSION}}" .
   build: go build -ldflags "-X main.version={{.VERSION}}" .
-  install: go build -ldflags "-X main.version=$(version)" -o /usr/local/bin/loop .
+  install: go build -ldflags "-X main.version={{.VERSION}}" -o /usr/local/bin/loop .
 
   push-images:
     cmds:
