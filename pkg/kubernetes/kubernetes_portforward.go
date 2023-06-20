@@ -8,18 +8,66 @@ import (
 	"net/url"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 )
 
-func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
+func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports1 map[int]int, readyChan chan struct{}) error {
+	service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+
+	if err != nil {
+		return err
+	}
+
 	pod, err := c.ServicePod(ctx, namespace, name)
 
 	if err != nil {
 		return err
 	}
 
-	return c.PodPortForward(ctx, pod.Namespace, pod.Name, address, ports, readyChan)
+	servicePorts := make(map[int]int)
+
+	for _, port := range service.Spec.Ports {
+		servicePort := int(port.Port)
+		containerPort := 0
+
+		if !(port.Protocol == corev1.ProtocolTCP || port.Protocol == corev1.ProtocolUDP) {
+			continue
+		}
+
+		for _, c := range pod.Spec.Containers {
+			for _, p := range c.Ports {
+				if p.Name != "" && p.Name == port.TargetPort.String() {
+					containerPort = int(p.ContainerPort)
+				}
+			}
+		}
+
+		if port.TargetPort.IntVal > 0 {
+			containerPort = int(port.TargetPort.IntVal)
+		}
+
+		if servicePort > 0 && containerPort > 0 {
+			servicePorts[servicePort] = containerPort
+		}
+	}
+
+	podMappings := make(map[int]int)
+
+	for k, v := range ports1 {
+		localPort := k
+		targetPort := v
+
+		if val, ok := servicePorts[targetPort]; ok {
+			targetPort = val
+		}
+
+		podMappings[localPort] = targetPort
+	}
+
+	return c.PodPortForward(ctx, pod.Namespace, pod.Name, address, podMappings, readyChan)
 }
 
 func (c *client) PodPortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
