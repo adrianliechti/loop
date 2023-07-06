@@ -34,6 +34,7 @@ type Client interface {
 	WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
 	WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error)
 
+	ReadFileInPod(ctx context.Context, namespace, name, container, path string, data io.Writer) error
 	CreateFileInPod(ctx context.Context, namespace, name, container, path string, data io.Reader) error
 }
 
