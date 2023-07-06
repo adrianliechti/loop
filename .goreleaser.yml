@@ -22,7 +22,6 @@ changelog:
 brews:
   - dependencies:
       - name: kubernetes-cli
-      - name: sshuttle
 
     tap:
       owner: adrianliechti
