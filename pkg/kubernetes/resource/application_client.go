@@ -113,7 +113,7 @@ func Apps(ctx context.Context, client kubernetes.Client, namespace string) ([]Ap
 		key, namespace, name, ok := appName(object, labels)
 
 		if !ok {
-			slog.DebugCtx(ctx, "missing app labels", "namespace", namespace, "name", name)
+			slog.DebugContext(ctx, "missing app labels", "namespace", namespace, "name", name)
 		}
 
 		if app, ok := apps[key]; ok {

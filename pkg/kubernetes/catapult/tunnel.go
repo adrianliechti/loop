@@ -44,7 +44,7 @@ func (t *tunnel) Start(ctx context.Context, readyChan chan struct{}) error {
 
 	go func() {
 		if err := t.client.PodPortForward(ctx, t.namespace, t.name, t.address, t.ports, readyChan); err != nil {
-			slog.ErrorCtx(ctx, "failed to forward", "address", t.address, "ports", t.ports, "error", err)
+			slog.ErrorContext(ctx, "failed to forward", "address", t.address, "ports", t.ports, "error", err)
 		}
 	}()
 

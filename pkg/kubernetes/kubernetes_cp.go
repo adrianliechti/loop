@@ -7,6 +7,19 @@ import (
 	"path/filepath"
 )
 
+func (c *client) ReadFileInPod(ctx context.Context, namespace, name, container, path string, data io.Writer) error {
+	cp := []string{
+		"cat",
+		path,
+	}
+
+	if err := c.PodExec(ctx, namespace, name, container, cp, false, nil, data, os.Stderr); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container, path string, data io.Reader) error {
 	mkdir := []string{
 		"mkdir",

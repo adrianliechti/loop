@@ -70,7 +70,7 @@ func (c *Catapult) Start(ctx context.Context) error {
 		}
 
 		if err := c.Refresh(ctx); err != nil {
-			slog.ErrorCtx(ctx, "refresh failed", "error", err)
+			slog.ErrorContext(ctx, "refresh failed", "error", err)
 		}
 
 		time.Sleep(10 * time.Second)
@@ -105,7 +105,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if removed {
-			slog.InfoCtx(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
+			slog.InfoContext(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
 
 			tunnel.Stop()
 
@@ -134,7 +134,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if added {
-			slog.InfoCtx(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
+			slog.InfoContext(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
 
 			if err := system.AliasIP(ctx, tunnel.address); err != nil {
 				result = multierror.Append(result, err)
