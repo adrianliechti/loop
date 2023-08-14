@@ -203,7 +203,7 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, image st
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.BoolPtr(true),
+						Privileged: to.Ptr(true),
 					},
 
 					VolumeMounts: []corev1.VolumeMount{
@@ -225,7 +225,7 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, image st
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Int64Ptr(10),
+			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
 	}
 
@@ -254,7 +254,7 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, image st
 
 func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Int64Ptr(0),
+		GracePeriodSeconds: to.Ptr(int64(0)),
 	})
 
 	return err

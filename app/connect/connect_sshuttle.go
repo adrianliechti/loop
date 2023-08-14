@@ -144,7 +144,7 @@ func createShuttle(ctx context.Context, client kubernetes.Client, namespace, nam
 
 func deleteShuttle(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Int64Ptr(0),
+		GracePeriodSeconds: to.Ptr(int64(0)),
 	})
 
 	return nil

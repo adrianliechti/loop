@@ -2,7 +2,6 @@ package connect
 
 import (
 	"context"
-	"os"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -34,29 +33,7 @@ var catapultCommand = &cli.Command{
 		}
 
 		if !elevated {
-			args := []string{
-				os.Args[0],
-				"connect",
-				"catapult",
-			}
-
-			if namespace != "" {
-				args = append(args, "--"+app.NamespaceFlag.Name, namespace)
-			}
-
-			if scope != "" {
-				args = append(args, "--"+app.ScopeFlag.Name, scope)
-			}
-
-			args = append(args, "--kubeconfig", client.ConfigPath())
-
-			os.Args = args
-
-			if err := system.RunElevated(); err != nil {
-				cli.Fatal("This command must be run as root!")
-			}
-
-			os.Exit(0)
+			cli.Fatal("This command must be run as root!")
 		}
 
 		return startCatapult(c.Context, client, namespace, scope)

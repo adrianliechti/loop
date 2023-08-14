@@ -203,7 +203,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						RunAsUser: to.Int64Ptr(1000),
+						RunAsUser: to.Ptr(int64(1000)),
 					},
 
 					Env: []corev1.EnvVar{
@@ -237,7 +237,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.BoolPtr(true),
+						Privileged: to.Ptr(true),
 					},
 
 					Env: []corev1.EnvVar{
@@ -279,7 +279,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.BoolPtr(true),
+						Privileged: to.Ptr(true),
 					},
 
 					VolumeMounts: []corev1.VolumeMount{
@@ -315,7 +315,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Int64Ptr(10),
+			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
 	}, metav1.CreateOptions{}); err != nil {
 		return "", err
@@ -338,6 +338,6 @@ func stopCodeContainer(ctx context.Context, client kubernetes.Client, namespace,
 	}
 
 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Int64Ptr(0),
+		GracePeriodSeconds: to.Ptr(int64(0)),
 	})
 }

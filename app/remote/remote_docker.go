@@ -129,7 +129,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.BoolPtr(true),
+						Privileged: to.Ptr(true),
 					},
 
 					Env: []corev1.EnvVar{
@@ -182,7 +182,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Int64Ptr(10),
+			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
 	}, metav1.CreateOptions{}); err != nil {
 		return nil, err
