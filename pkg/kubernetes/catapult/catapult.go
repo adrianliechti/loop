@@ -12,7 +12,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
 
-	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
 	"github.com/hashicorp/go-multierror"
 	"golang.org/x/exp/maps"
 
@@ -25,8 +24,8 @@ type Catapult struct {
 	client  kubernetes.Client
 	options CatapultOptions
 
-	tunnels   []*tunnel
-	hostsfile goodhosts.Hosts
+	tunnels []*tunnel
+	hosts   *system.HostsSection
 }
 
 type CatapultOptions struct {
@@ -37,7 +36,7 @@ type CatapultOptions struct {
 }
 
 func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
-	hostsfile, err := goodhosts.NewHosts("Loop")
+	hosts, err := system.NewHostsSection("Loop")
 
 	if err != nil {
 		return nil, err
@@ -47,21 +46,18 @@ func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
 		client:  client,
 		options: options,
 
-		hostsfile: hostsfile,
+		hosts: hosts,
 	}, nil
 }
 
 func (c *Catapult) Start(ctx context.Context) error {
 	defer func() {
-		c.hostsfile.Load()
+		c.hosts.Clear()
+		c.hosts.Flush()
 
 		for _, t := range c.tunnels {
 			system.UnaliasIP(context.Background(), t.address)
-			c.hostsfile.Remove(t.address, t.hosts...)
 		}
-
-		c.hostsfile.RemoveSection()
-		c.hostsfile.Flush()
 	}()
 
 	for {
@@ -86,10 +82,6 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		return err
 	}
 
-	if err := c.hostsfile.Load(); err != nil {
-		return err
-	}
-
 	var result error
 
 	// remove unused tunnels
@@ -107,14 +99,11 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		if removed {
 			slog.InfoContext(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
 
+			c.hosts.Remove(tunnel.address)
+
 			tunnel.Stop()
 
 			if err := system.UnaliasIP(ctx, tunnel.address); err != nil {
-				result = multierror.Append(result, err)
-				continue
-			}
-
-			if err := c.hostsfile.Remove(tunnel.address, tunnel.hosts...); err != nil {
 				result = multierror.Append(result, err)
 				continue
 			}
@@ -141,21 +130,18 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 				continue
 			}
 
-			if err := c.hostsfile.Add(tunnel.address, "", tunnel.hosts...); err != nil {
-				result = multierror.Append(result, err)
-				continue
-			}
-
 			if err := tunnel.Start(ctx, nil); err != nil {
 				result = multierror.Append(result, err)
 				continue
 			}
+
+			c.hosts.Add(tunnel.address, tunnel.hosts...)
 		}
 	}
 
 	c.tunnels = tunnels
 
-	if err := c.hostsfile.Flush(); err != nil {
+	if err := c.hosts.Flush(); err != nil {
 		return err
 	}
 
