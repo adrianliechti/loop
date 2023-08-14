@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"log"
+	"log/slog"
 	"net"
 	"strings"
 
 	"github.com/miekg/dns"
-	"golang.org/x/exp/slog"
 )
 
 const (

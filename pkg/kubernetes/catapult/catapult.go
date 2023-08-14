@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/ChrisWiegman/goodhosts/v4/pkg/goodhosts"
 	"github.com/hashicorp/go-multierror"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

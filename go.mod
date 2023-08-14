@@ -1,23 +1,23 @@
 module github.com/adrianliechti/loop
 
-go 1.20
+go 1.21
 
 require (
-	github.com/ChrisWiegman/goodhosts/v4 v4.1.0
+	github.com/ChrisWiegman/goodhosts/v4 v4.1.1
 	github.com/Masterminds/semver v1.5.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/lmittmann/tint v0.3.4
+	github.com/lmittmann/tint v1.0.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/urfave/cli/v2 v2.25.7
-	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
+	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.9.0
-	k8s.io/api v0.27.3
-	k8s.io/apimachinery v0.27.3
-	k8s.io/client-go v0.27.3
+	golang.org/x/sys v0.11.0
+	k8s.io/api v0.27.4
+	k8s.io/apimachinery v0.27.4
+	k8s.io/client-go v0.27.4
 )
 
 require (

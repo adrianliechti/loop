@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,7 +15,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 
 	"github.com/lmittmann/tint"
-	"golang.org/x/exp/slog"
 )
 
 var version string

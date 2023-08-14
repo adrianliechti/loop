@@ -3,12 +3,12 @@ package resource
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

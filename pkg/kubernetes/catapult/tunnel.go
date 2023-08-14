@@ -2,9 +2,9 @@ package catapult
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"golang.org/x/exp/slog"
 )
 
 type tunnel struct {
