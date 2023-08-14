@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -59,6 +60,8 @@ func (s *HostsSection) Flush() error {
 		return err
 	}
 
+	defer file.Close()
+
 	data, err := io.ReadAll(file)
 
 	if err != nil {
@@ -78,10 +81,15 @@ func (s *HostsSection) Flush() error {
 	}
 
 	if len(s.hosts) > 0 {
+		text = strings.TrimRight(text, ln) + ln
 		text += headerStart
 
 		for address, hosts := range s.hosts {
-			text += fmt.Sprintf("%s %s%s", address, strings.Join(hosts, " "), ln)
+			slices.Sort(hosts)
+
+			for _, host := range hosts {
+				text += fmt.Sprintf("%s %s%s", address, host, ln)
+			}
 		}
 
 		text += fmt.Sprintf("%s%s", headerEnd, ln)
