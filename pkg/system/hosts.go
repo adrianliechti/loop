@@ -81,7 +81,7 @@ func (s *HostsSection) Flush() error {
 	}
 
 	if len(s.hosts) > 0 {
-		text = strings.TrimRight(text, ln) + ln
+		text = strings.TrimRight(text, ln) + ln + ln
 		text += headerStart
 
 		for address, hosts := range s.hosts {
