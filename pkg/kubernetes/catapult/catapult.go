@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -33,6 +34,8 @@ type CatapultOptions struct {
 	Namespace string
 
 	Selector string
+
+	IncludeIngress bool
 }
 
 func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
@@ -167,6 +170,34 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		return tunnels, err
 	}
 
+	ingressHosts := make(map[string]string)
+
+	if c.options.IncludeIngress {
+		ingresses, err := c.client.NetworkingV1().Ingresses(c.options.Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return tunnels, err
+		}
+
+		for _, i := range ingresses.Items {
+			if len(i.Status.LoadBalancer.Ingress) == 0 {
+				continue
+			}
+
+			ip := i.Status.LoadBalancer.Ingress[0].IP
+
+			for _, r := range i.Spec.Rules {
+				if r.Host == "" {
+					continue
+				}
+
+				ingressHosts[r.Host] = ip
+			}
+		}
+	}
+
 	for _, service := range services.Items {
 		if len(service.Spec.Selector) == 0 {
 			continue
@@ -192,6 +223,26 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 
 				if service.Namespace == c.options.Scope {
 					hosts = append([]string{service.Name}, hosts...)
+				}
+
+				for host, ip := range ingressHosts {
+					var found bool
+
+					for _, i := range service.Status.LoadBalancer.Ingress {
+						if i.IP == ip {
+							found = true
+						}
+					}
+
+					if !found {
+						continue
+					}
+
+					if slices.Contains(hosts, host) {
+						continue
+					}
+
+					hosts = append(hosts, host)
 				}
 
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
