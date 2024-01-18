@@ -54,6 +54,9 @@ func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
 }
 
 func (c *Catapult) Start(ctx context.Context) error {
+	c.hosts.Clear()
+	c.hosts.Flush()
+
 	defer func() {
 		c.hosts.Clear()
 		c.hosts.Flush()
