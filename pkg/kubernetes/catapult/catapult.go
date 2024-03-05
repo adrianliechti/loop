@@ -17,6 +17,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -30,8 +31,8 @@ type Catapult struct {
 }
 
 type CatapultOptions struct {
-	Scope     string
-	Namespace string
+	Scope      string
+	Namespaces []string
 
 	Selector string
 
@@ -157,17 +158,13 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	tunnels := make([]*tunnel, 0)
 
-	services, err := c.client.CoreV1().Services(c.options.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: c.options.Selector,
-	})
+	services, err := c.listServices(ctx)
 
 	if err != nil {
 		return tunnels, err
 	}
 
-	pods, err := c.client.CoreV1().Pods(c.options.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: c.options.Selector,
-	})
+	pods, err := c.listPods(ctx)
 
 	if err != nil {
 		return tunnels, err
@@ -176,15 +173,13 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	ingressHosts := make(map[string]string)
 
 	if c.options.IncludeIngress {
-		ingresses, err := c.client.NetworkingV1().Ingresses(c.options.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
+		ingresses, err := c.listIngresses(ctx)
 
 		if err != nil {
 			return tunnels, err
 		}
 
-		for _, i := range ingresses.Items {
+		for _, i := range ingresses {
 			if len(i.Status.LoadBalancer.Ingress) == 0 {
 				continue
 			}
@@ -201,14 +196,14 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		}
 	}
 
-	for _, service := range services.Items {
+	for _, service := range services {
 		if len(service.Spec.Selector) == 0 {
 			continue
 		}
 
 		selector := labels.SelectorFromSet(service.Spec.Selector)
 
-		pods := selectPods(pods.Items, selector)
+		pods := selectPods(pods, selector)
 
 		if service.Spec.ClusterIP != corev1.ClusterIPNone {
 			// Normal Services
@@ -266,6 +261,96 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	}
 
 	return tunnels, nil
+}
+
+func (c *Catapult) listServices(ctx context.Context) ([]corev1.Service, error) {
+	var result []corev1.Service
+
+	if len(c.options.Namespaces) == 0 {
+		list, err := c.client.CoreV1().Services("").List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		return list.Items, nil
+	}
+
+	for _, namespace := range c.options.Namespaces {
+		list, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, list.Items...)
+	}
+
+	return result, nil
+}
+
+func (c *Catapult) listPods(ctx context.Context) ([]corev1.Pod, error) {
+	var result []corev1.Pod
+
+	if len(c.options.Namespaces) == 0 {
+		list, err := c.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		return list.Items, nil
+	}
+
+	for _, namespace := range c.options.Namespaces {
+		list, err := c.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, list.Items...)
+	}
+
+	return result, nil
+}
+
+func (c *Catapult) listIngresses(ctx context.Context) ([]networkingv1.Ingress, error) {
+	var result []networkingv1.Ingress
+
+	if len(c.options.Namespaces) == 0 {
+		list, err := c.client.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		return list.Items, nil
+	}
+
+	for _, namespace := range c.options.Namespaces {
+		list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: c.options.Selector,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, list.Items...)
+	}
+
+	return result, nil
 }
 
 func selectPods(pods []corev1.Pod, selector labels.Selector) []corev1.Pod {

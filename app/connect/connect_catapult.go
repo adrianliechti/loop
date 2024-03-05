@@ -16,7 +16,7 @@ var catapultCommand = &cli.Command{
 
 	Flags: []cli.Flag{
 		app.ScopeFlag,
-		app.NamespaceFlag,
+		app.NamespacesFlag,
 		app.KubeconfigFlag,
 	},
 
@@ -24,7 +24,7 @@ var catapultCommand = &cli.Command{
 		client := app.MustClient(c)
 
 		scope := app.Scope(c)
-		namespace := app.Namespace(c)
+		namespaces := app.Namespaces(c)
 
 		elevated, err := system.IsElevated()
 
@@ -36,13 +36,13 @@ var catapultCommand = &cli.Command{
 			cli.Fatal("This command must be run as root!")
 		}
 
-		return startCatapult(c.Context, client, namespace, scope)
+		return startCatapult(c.Context, client, namespaces, scope)
 	},
 }
 
-func startCatapult(ctx context.Context, client kubernetes.Client, namespace, scope string) error {
-	if scope == "" {
-		scope = namespace
+func startCatapult(ctx context.Context, client kubernetes.Client, namespaces []string, scope string) error {
+	if scope == "" && len(namespaces) > 0 {
+		scope = namespaces[0]
 	}
 
 	if scope == "" {
@@ -50,8 +50,8 @@ func startCatapult(ctx context.Context, client kubernetes.Client, namespace, sco
 	}
 
 	catapult, err := catapult.New(client, catapult.CatapultOptions{
-		Scope:     scope,
-		Namespace: namespace,
+		Scope:      scope,
+		Namespaces: namespaces,
 
 		IncludeIngress: true,
 	})
