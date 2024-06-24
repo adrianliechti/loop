@@ -1,3 +1,5 @@
+version: 2
+
 before:
   hooks:
     - go mod tidy
@@ -23,7 +25,7 @@ brews:
   - dependencies:
       - name: kubernetes-cli
 
-    tap:
+    repository:
       owner: adrianliechti
       name: homebrew-tap
 
@@ -32,7 +34,7 @@ brews:
       email: adrian@localhost
 
 scoops:
-  - bucket:
+  - repository:
       owner: adrianliechti
       name: scoop-bucket
 
