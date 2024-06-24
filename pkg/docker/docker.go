@@ -13,25 +13,12 @@ import (
 var (
 	minimalVersion = semver.MustParse("19.0.0")
 
-	errNotFound   = errors.New("docker not found. see https://docs.docker.com/get-docker/")
-	errOutdated   = errors.New("docker is outdated. see https://docs.docker.com/get-docker/")
-	errNotRunning = errors.New("docker seems not to be running")
+	errNotFound = errors.New("docker not found. see https://docs.docker.com/get-docker/")
+	errOutdated = errors.New("docker is outdated. see https://docs.docker.com/get-docker/")
 )
 
 func Info(ctx context.Context) (string, *semver.Version, error) {
-	path, version, err := path(ctx)
-
-	if err != nil {
-		return path, version, err
-	}
-
-	cmd := exec.CommandContext(ctx, path, "info")
-
-	if err := cmd.Run(); err == nil {
-		return path, version, nil
-	}
-
-	return path, version, errNotRunning
+	return path(ctx)
 }
 
 func path(ctx context.Context) (string, *semver.Version, error) {
