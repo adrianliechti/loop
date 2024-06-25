@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/adrianliechti/loop/app"
@@ -135,20 +137,17 @@ func startServer(ctx context.Context, port int, path string, ports map[int]int) 
 
 		SubsystemHandlers: map[string]ssh.SubsystemHandler{
 			"sftp": func(sess ssh.Session) {
-				options := []sftp.ServerOption{
-					sftp.WithServerWorkingDirectory(path),
-				}
+				fs := &sftpFileSystem{path}
 
-				server, err := sftp.NewServer(sess, options...)
+				srv := sftp.NewRequestServer(sess, sftp.Handlers{
+					FileList: fs,
+					FileGet:  fs,
+					FilePut:  fs,
+				})
 
-				if err != nil {
-					log.Printf("sftp server init error: %s\n", err)
-					return
-				}
-
-				if err := server.Serve(); err != nil {
+				if err := srv.Serve(); err != nil {
 					if err == io.EOF {
-						server.Close()
+						srv.Close()
 						return
 					}
 
@@ -308,7 +307,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 		"localhost",
 	}
 
-	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:" + path + " /mnt/src && exec /bin/sh"
+	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && exec /bin/sh"
 
 	if port != 0 {
 		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))
@@ -327,4 +326,113 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 	cmd.Stdout = os.Stdout
 
 	return cmd.Run()
+}
+
+type sftpFileSystem struct {
+	root string
+}
+
+func (s *sftpFileSystem) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
+	path := filepath.Join(s.root, r.Filepath)
+
+	switch r.Method {
+	case "List":
+		entries, err := os.ReadDir(path)
+
+		if err != nil {
+			return nil, fmt.Errorf("sftp: %w", err)
+		}
+
+		infos := make([]fs.FileInfo, len(entries))
+
+		for i, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				return nil, err
+			}
+			infos[i] = info
+		}
+
+		return listerAt(infos), nil
+
+	case "Stat":
+		fi, err := os.Stat(path)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return listerAt{fi}, nil
+
+	default:
+		return nil, sftp.ErrSSHFxOpUnsupported
+	}
+}
+
+func (s *sftpFileSystem) openFile(r *sftp.Request) (*os.File, error) {
+	var flags int
+
+	pflags := r.Pflags()
+
+	if pflags.Append {
+		flags |= os.O_APPEND
+	}
+
+	if pflags.Creat {
+		flags |= os.O_CREATE
+	}
+
+	if pflags.Excl {
+		flags |= os.O_EXCL
+	}
+
+	if pflags.Trunc {
+		flags |= os.O_TRUNC
+	}
+
+	if pflags.Read && pflags.Write {
+		flags |= os.O_RDWR
+	} else if pflags.Read {
+		flags |= os.O_RDONLY
+	} else if pflags.Write {
+		flags |= os.O_WRONLY
+	}
+
+	return os.OpenFile(filepath.Join(s.root, r.Filepath), flags, 0644)
+}
+
+func (s *sftpFileSystem) Fileread(r *sftp.Request) (io.ReaderAt, error) {
+	f, err := s.openFile(r)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func (s *sftpFileSystem) Filewrite(r *sftp.Request) (io.WriterAt, error) {
+	f, err := s.openFile(r)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+type listerAt []fs.FileInfo
+
+func (l listerAt) ListAt(ls []fs.FileInfo, offset int64) (int, error) {
+	if offset >= int64(len(l)) {
+		return 0, io.EOF
+	}
+
+	n := copy(ls, l[offset:])
+
+	if n < len(ls) {
+		return n, io.EOF
+	}
+
+	return n, nil
 }
