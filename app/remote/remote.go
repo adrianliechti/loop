@@ -14,5 +14,7 @@ var Command = &cli.Command{
 		shellCommand,
 		codeCommand,
 		dockerCommand,
+
+		streamCommand,
 	},
 }

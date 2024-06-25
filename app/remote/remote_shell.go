@@ -14,13 +14,13 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sftp"
 	sshtool "github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/pkg/sftp"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -134,25 +134,12 @@ func startServer(ctx context.Context, port int, path string, ports map[int]int) 
 		}),
 
 		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(sess ssh.Session) {
-				options := []sftp.ServerOption{
-					sftp.WithServerWorkingDirectory(path),
-				}
+			"sftp": func(s ssh.Session) {
 
-				server, err := sftp.NewServer(sess, options...)
+				srv := sftp.New(s, path)
 
-				if err != nil {
-					log.Printf("sftp server init error: %s\n", err)
-					return
-				}
-
-				if err := server.Serve(); err != nil {
-					if err == io.EOF {
-						server.Close()
-						return
-					}
-
-					fmt.Println("sftp server completed with error:", err)
+				if err := srv.Serve(); err != nil {
+					srv.Close()
 				}
 			},
 		},
@@ -292,7 +279,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 		return err
 	}
 
-	kubectl, _, err := kubectl.Info(ctx)
+	self, err := os.Executable()
 
 	if err != nil {
 		return err
@@ -304,11 +291,11 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 		"-l", "root",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
-		"-o", fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -c ssh -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
+		"-o", fmt.Sprintf("ProxyCommand=%s remote stream --kubeconfig %s --namespace %s --name %s --container ssh --port 22", self, client.ConfigPath(), namespace, name),
 		"localhost",
 	}
 
-	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:" + path + " /mnt/src && exec /bin/sh"
+	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && exec /bin/sh"
 
 	if port != 0 {
 		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))

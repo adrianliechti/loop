@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -47,7 +46,7 @@ func NewFromConfig(path string) (Client, error) {
 		path = ConfigPath()
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 
 	if err != nil {
 		return nil, err
