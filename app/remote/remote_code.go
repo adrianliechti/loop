@@ -21,7 +21,7 @@ import (
 
 var codeCommand = &cli.Command{
 	Name:  "code",
-	Usage: "run cluster VSCode Server",
+	Usage: "run cluster VS Code",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

@@ -12,8 +12,8 @@ var Command = &cli.Command{
 
 	Subcommands: []*cli.Command{
 		shellCommand,
-		codeCommand,
 		dockerCommand,
+		codeCommand,
 
 		streamCommand,
 	},

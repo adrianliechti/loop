@@ -20,7 +20,7 @@ import (
 
 var dockerCommand = &cli.Command{
 	Name:  "docker",
-	Usage: "run cluster Docker daemon",
+	Usage: "run cluster Docker",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
