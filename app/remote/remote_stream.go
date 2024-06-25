@@ -12,7 +12,7 @@ var streamCommand = &cli.Command{
 	Name:  "stream",
 	Usage: "connect cluster stream",
 
-	HideHelp: true,
+	Hidden: true,
 
 	Flags: []cli.Flag{
 		app.KubeconfigFlag,

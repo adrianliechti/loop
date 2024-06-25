@@ -27,7 +27,7 @@ import (
 
 var shellCommand = &cli.Command{
 	Name:  "shell",
-	Usage: "run cluster shell",
+	Usage: "run cluster Shell",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
