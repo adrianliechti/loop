@@ -279,7 +279,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 		return err
 	}
 
-	kubectl, _, err := kubectl.Info(ctx)
+	self, err := os.Executable()
 
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 		"-l", "root",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
-		"-o", fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -c ssh -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
+		"-o", fmt.Sprintf("ProxyCommand=%s remote stream --kubeconfig %s --namespace %s --name %s --container ssh --port 22", self, client.ConfigPath(), namespace, name),
 		"localhost",
 	}
 

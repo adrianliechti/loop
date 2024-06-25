@@ -31,6 +31,31 @@ func MustName(c *cli.Context) string {
 	return value
 }
 
+var ContainerFlag = &cli.StringFlag{
+	Name:  "container",
+	Usage: "container",
+}
+
+func Container(c *cli.Context) string {
+	value := c.String(ContainerFlag.Name)
+
+	if value == "" {
+		return ""
+	}
+
+	return value
+}
+
+func ContainerName(c *cli.Context) string {
+	value := Container(c)
+
+	if value == "" {
+		cli.Fatal(errors.New("container missing"))
+	}
+
+	return value
+}
+
 var NamespaceFlag = &cli.StringFlag{
 	Name:  "namespace",
 	Usage: "namespace scope for this request",
