@@ -12,11 +12,6 @@ var PortFlag = &cli.IntFlag{
 	Usage: "port",
 }
 
-var PortsFlag = &cli.IntSliceFlag{
-	Name:  "port",
-	Usage: "port",
-}
-
 func Port(c *cli.Context) int {
 	return c.Int(PortFlag.Name)
 }
@@ -29,6 +24,11 @@ func MustPort(c *cli.Context) int {
 	}
 
 	return port
+}
+
+var PortsFlag = &cli.IntSliceFlag{
+	Name:  "port",
+	Usage: "port",
 }
 
 func Ports(c *cli.Context) []int {

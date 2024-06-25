@@ -94,7 +94,7 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 	}()
 
 	go func() {
-		if err := runTunnel(ctx, client, namespace, pod, path, sshdPort, ports); err != nil {
+		if err := runTunnel(ctx, client, namespace, pod, sshdPort, ports); err != nil {
 			cli.Error(err)
 		}
 	}()
@@ -103,35 +103,12 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 }
 
 func startServer(ctx context.Context, port int, path string, ports map[int]int) error {
-	forwardHandler := &ssh.ForwardedTCPHandler{}
-
 	s := ssh.Server{
 		Addr: fmt.Sprintf("127.0.0.1:%d", port),
 
 		Handler: func(s ssh.Session) {
 			io.WriteString(s, "SSH server operational. Use SFTP for file transfer.\n")
 		},
-
-		RequestHandlers: map[string]ssh.RequestHandler{
-			"tcpip-forward":        forwardHandler.HandleSSHRequest,
-			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
-		},
-
-		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, host string, port uint32) bool {
-			return false
-		}),
-
-		ReversePortForwardingCallback: ssh.ReversePortForwardingCallback(func(ctx ssh.Context, host string, port uint32) bool {
-			return false
-		}),
-
-		PublicKeyHandler: ssh.PublicKeyHandler(func(ctx ssh.Context, key ssh.PublicKey) bool {
-			return true
-		}),
-
-		PasswordHandler: ssh.PasswordHandler(func(ctx ssh.Context, password string) bool {
-			return true
-		}),
 
 		SubsystemHandlers: map[string]ssh.SubsystemHandler{
 			"sftp": func(s ssh.Session) {
@@ -272,7 +249,7 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 	return err
 }
 
-func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, path string, port int, tunnels map[int]int) error {
+func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, port int, tunnels map[int]int) error {
 	ssh, _, err := sshtool.Info(ctx)
 
 	if err != nil {
@@ -298,11 +275,11 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && exec /bin/sh"
 
 	if port != 0 {
-		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))
+		args = append(args, "-R", fmt.Sprintf("127.0.0.1:2222:127.0.0.1:%d", port))
 	}
 
 	for source, target := range tunnels {
-		args = append(args, "-L", fmt.Sprintf("%d:127.0.0.1:%d", source, target))
+		args = append(args, "-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", source, target))
 	}
 
 	if command != "" {

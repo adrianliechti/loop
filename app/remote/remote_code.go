@@ -119,7 +119,7 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return runTunnel(ctx, client, namespace, pod, path, sshdPort, tunnelPorts)
+	return runTunnel(ctx, client, namespace, pod, sshdPort, tunnelPorts)
 }
 
 func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, image string) (string, error) {
