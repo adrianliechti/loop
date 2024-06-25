@@ -28,6 +28,7 @@ type Client interface {
 	ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error
 
 	PodExec(ctx context.Context, namespace, name, container string, command []string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error
+	PodAttach(ctx context.Context, namespace, name, container string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error
 	PodPortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error
 
 	WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)

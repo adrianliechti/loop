@@ -11,7 +11,6 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
 
@@ -222,7 +221,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 		return err
 	}
 
-	kubectl, _, err := kubectl.Info(ctx)
+	self, err := os.Executable()
 
 	if err != nil {
 		return err
@@ -233,9 +232,9 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 		"-l", "root",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
-		"-o", fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
-		"localhost",
+		"-o", fmt.Sprintf("ProxyCommand=%s remote stream --kubeconfig %s --namespace %s --name %s --container ssh --port 22", self, client.ConfigPath(), namespace, name),
 		"-N",
+		"localhost",
 	}
 
 	for s, t := range ports {

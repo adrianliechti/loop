@@ -12,7 +12,6 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/sftp"
 	sshtool "github.com/adrianliechti/loop/pkg/ssh"
@@ -99,7 +98,7 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 		}
 	}()
 
-	return kubectl.Attach(ctx, client.ConfigPath(), namespace, pod, "shell")
+	return client.PodAttach(ctx, namespace, pod, "shell", tty, os.Stdin, os.Stdout, os.Stderr)
 }
 
 func startServer(ctx context.Context, port int, path string, ports map[int]int) error {
