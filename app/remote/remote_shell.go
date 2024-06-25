@@ -57,10 +57,6 @@ var shellCommand = &cli.Command{
 		image := c.String("image")
 		namespace := app.Namespace(c)
 
-		if namespace == "" {
-			namespace = client.Namespace()
-		}
-
 		if image == "" {
 			image = "debian"
 		}
@@ -70,6 +66,10 @@ var shellCommand = &cli.Command{
 }
 
 func runShell(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
+	if namespace == "" {
+		namespace = client.Namespace()
+	}
+
 	sshdPort, err := system.FreePort(0)
 
 	if err != nil {

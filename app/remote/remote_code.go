@@ -73,10 +73,6 @@ var codeCommand = &cli.Command{
 		port := app.MustPortOrRandom(c, 3000)
 		namespace := app.Namespace(c)
 
-		if namespace == "" {
-			namespace = client.Namespace()
-		}
-
 		return runCode(c.Context, client, stack, port, namespace, path, nil)
 	},
 }
