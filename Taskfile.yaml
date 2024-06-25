@@ -9,30 +9,3 @@ tasks:
   run: go run -ldflags "-X main.version={{.VERSION}}" .
   build: go build -ldflags "-X main.version={{.VERSION}}" .
   install: go build -ldflags "-X main.version={{.VERSION}}" -o /usr/local/bin/loop .
-
-  push-images:
-    cmds:
-      - task: push-dns-image
-      - task: push-socks-image
-      - task: push-tunnel-image
-
-  push-dns-image:
-    dir: helpers/loop-dns
-    vars:
-      DOCKER_IMAGE: adrianliechti/loop-dns:0
-    cmds:
-      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
-
-  push-socks-image:
-    dir: helpers/loop-socks
-    vars:
-      DOCKER_IMAGE: adrianliechti/loop-socks:0
-    cmds:
-      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
-
-  push-tunnel-image:
-    dir: helpers/loop-tunnel
-    vars:
-      DOCKER_IMAGE: adrianliechti/loop-tunnel:0
-    cmds:
-      - docker buildx build --push --platform linux/arm64,linux/amd64 --tag {{.DOCKER_IMAGE}} .
