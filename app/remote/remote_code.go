@@ -86,23 +86,16 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		namespace = client.Namespace()
 	}
 
-	containerPort, err := system.FreePort(0)
+	sshdPort, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	cli.Infof("Starting helper container...")
-	container, err := startServer(ctx, path, containerPort)
-
-	if err != nil {
+	cli.Infof("Starting ssh server...")
+	if err := startServer(ctx, sshdPort, path, ports); err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Stopping helper container (%s)...", container)
-		stopServer(context.Background(), container)
-	}()
 
 	cli.Infof("Starting remote VSCode...")
 	pod, err := startCodeContainer(ctx, client, namespace, "adrianliechti/loop-code:"+stack)
@@ -126,7 +119,7 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return runTunnel(ctx, client, namespace, pod, containerPort, tunnelPorts)
+	return runTunnel(ctx, client, namespace, pod, path, sshdPort, tunnelPorts)
 }
 
 func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, image string) (string, error) {

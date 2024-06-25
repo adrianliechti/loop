@@ -4,19 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
-	"strings"
+	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/ssh"
+	sshtool "github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
+
+	"github.com/gliderlabs/ssh"
+	"github.com/pkg/sftp"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +33,7 @@ var shellCommand = &cli.Command{
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
 		app.KubeconfigFlag,
+
 		&cli.StringFlag{
 			Name:  "image",
 			Usage: "container image to start",
@@ -65,23 +70,16 @@ var shellCommand = &cli.Command{
 }
 
 func runShell(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
-	containerPort, err := system.FreePort(0)
+	sshdPort, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	cli.Infof("Starting helper container...")
-	container, err := startServer(ctx, path, containerPort)
-
-	if err != nil {
+	cli.Infof("Starting ssh server...")
+	if err := startServer(ctx, sshdPort, path, ports); err != nil {
 		return err
 	}
-
-	defer func() {
-		cli.Infof("Stopping helper container (%s)...", container)
-		stopServer(context.Background(), container)
-	}()
 
 	cli.Infof("Starting remote container...")
 	pod, err := startPod(ctx, client, namespace, image, stdin, tty)
@@ -96,7 +94,7 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 	}()
 
 	go func() {
-		if err := runTunnel(ctx, client, namespace, pod, containerPort, ports); err != nil {
+		if err := runTunnel(ctx, client, namespace, pod, path, sshdPort, ports); err != nil {
 			cli.Error(err)
 		}
 	}()
@@ -104,65 +102,92 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 	return kubectl.Attach(ctx, client.ConfigPath(), namespace, pod, "shell")
 }
 
-func startServer(ctx context.Context, path string, port int) (string, error) {
-	tool, _, err := docker.Info(ctx)
+func startServer(ctx context.Context, port int, path string, ports map[int]int) error {
+	forwardHandler := &ssh.ForwardedTCPHandler{}
 
-	if err != nil {
-		return "", err
+	s := ssh.Server{
+		Addr: fmt.Sprintf("127.0.0.1:%d", port),
+
+		Handler: func(s ssh.Session) {
+			io.WriteString(s, "SSH server operational. Use SFTP for file transfer.\n")
+		},
+
+		RequestHandlers: map[string]ssh.RequestHandler{
+			"tcpip-forward":        forwardHandler.HandleSSHRequest,
+			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
+		},
+
+		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, host string, port uint32) bool {
+			return false
+		}),
+
+		ReversePortForwardingCallback: ssh.ReversePortForwardingCallback(func(ctx ssh.Context, host string, port uint32) bool {
+			return false
+		}),
+
+		PublicKeyHandler: ssh.PublicKeyHandler(func(ctx ssh.Context, key ssh.PublicKey) bool {
+			return true
+		}),
+
+		PasswordHandler: ssh.PasswordHandler(func(ctx ssh.Context, password string) bool {
+			return true
+		}),
+
+		SubsystemHandlers: map[string]ssh.SubsystemHandler{
+			"sftp": func(sess ssh.Session) {
+				options := []sftp.ServerOption{
+					sftp.WithServerWorkingDirectory(path),
+				}
+
+				server, err := sftp.NewServer(sess, options...)
+
+				if err != nil {
+					log.Printf("sftp server init error: %s\n", err)
+					return
+				}
+
+				if err := server.Serve(); err != nil {
+					if err == io.EOF {
+						server.Close()
+						return
+					}
+
+					fmt.Println("sftp server completed with error:", err)
+				}
+			},
+		},
 	}
 
-	args := []string{
-		"run",
-		"-d",
+	go func() {
+		<-ctx.Done()
 
-		"--pull",
-		"always",
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-		"--publish",
-		fmt.Sprintf("127.0.0.1:%d:22", port),
+		if err := s.Shutdown(ctx); err != nil {
+			if errors.Is(err, ssh.ErrServerClosed) {
+				return
+			}
 
-		"--volume",
-		path + ":/src",
+			log.Println("could not stop server", "error", err)
+		}
 
-		"adrianliechti/loop-tunnel",
-	}
+		if err := s.Close(); err != nil {
+			log.Println("could not close server", "error", err)
+		}
+	}()
 
-	cmd := exec.CommandContext(ctx, tool, args...)
+	go func() {
+		if err := s.ListenAndServe(); err != nil {
+			if errors.Is(err, ssh.ErrServerClosed) {
+				return
+			}
 
-	output, err := cmd.CombinedOutput()
+			log.Println("could not start server", "error", err)
+		}
+	}()
 
-	if err != nil {
-		return "", errors.New(string(output))
-	}
-
-	text := string(output)
-	text = strings.ReplaceAll(text, "\r", "")
-	text = strings.TrimRight(text, "\n")
-
-	lines := strings.Split(text, "\n")
-
-	if len(lines) == 0 {
-		return "", errors.New("unable to get container id")
-	}
-
-	container := lines[len(lines)-1]
-	return container, nil
-}
-
-func stopServer(ctx context.Context, container string) error {
-	tool, _, err := docker.Info(ctx)
-
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, tool, "rm", "--force", container)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return errors.New(string(output))
-	}
-
-	return err
+	return nil
 }
 
 func startPod(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool) (string, error) {
@@ -260,8 +285,8 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 	return err
 }
 
-func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, port int, tunnels map[int]int) error {
-	ssh, _, err := ssh.Info(ctx)
+func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, path string, port int, tunnels map[int]int) error {
+	ssh, _, err := sshtool.Info(ctx)
 
 	if err != nil {
 		return err
@@ -283,7 +308,7 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name st
 		"localhost",
 	}
 
-	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/src /mnt/src && exec /bin/sh"
+	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:" + path + " /mnt/src && exec /bin/sh"
 
 	if port != 0 {
 		args = append(args, "-R", fmt.Sprintf("2222:127.0.0.1:%d", port))

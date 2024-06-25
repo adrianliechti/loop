@@ -9,7 +9,6 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/to"
 
@@ -47,11 +46,7 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		namespace = client.Namespace()
 	}
 
-	docker, _, err := docker.Info(ctx)
-
-	if err != nil {
-		return err
-	}
+	docker := "docker"
 
 	loopContext := "loop"
 	currentContext := "default"
