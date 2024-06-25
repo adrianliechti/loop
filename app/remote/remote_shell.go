@@ -5,24 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sftp"
 	sshtool "github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/pkg/sftp"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,22 +134,12 @@ func startServer(ctx context.Context, port int, path string, ports map[int]int) 
 		}),
 
 		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(sess ssh.Session) {
-				fs := &sftpFileSystem{path}
+			"sftp": func(s ssh.Session) {
 
-				srv := sftp.NewRequestServer(sess, sftp.Handlers{
-					FileList: fs,
-					FileGet:  fs,
-					FilePut:  fs,
-				})
+				srv := sftp.New(s, path)
 
 				if err := srv.Serve(); err != nil {
-					if err == io.EOF {
-						srv.Close()
-						return
-					}
-
-					fmt.Println("sftp server completed with error:", err)
+					srv.Close()
 				}
 			},
 		},
@@ -326,113 +314,4 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name, p
 	cmd.Stdout = os.Stdout
 
 	return cmd.Run()
-}
-
-type sftpFileSystem struct {
-	root string
-}
-
-func (s *sftpFileSystem) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
-	path := filepath.Join(s.root, r.Filepath)
-
-	switch r.Method {
-	case "List":
-		entries, err := os.ReadDir(path)
-
-		if err != nil {
-			return nil, fmt.Errorf("sftp: %w", err)
-		}
-
-		infos := make([]fs.FileInfo, len(entries))
-
-		for i, entry := range entries {
-			info, err := entry.Info()
-			if err != nil {
-				return nil, err
-			}
-			infos[i] = info
-		}
-
-		return listerAt(infos), nil
-
-	case "Stat":
-		fi, err := os.Stat(path)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return listerAt{fi}, nil
-
-	default:
-		return nil, sftp.ErrSSHFxOpUnsupported
-	}
-}
-
-func (s *sftpFileSystem) openFile(r *sftp.Request) (*os.File, error) {
-	var flags int
-
-	pflags := r.Pflags()
-
-	if pflags.Append {
-		flags |= os.O_APPEND
-	}
-
-	if pflags.Creat {
-		flags |= os.O_CREATE
-	}
-
-	if pflags.Excl {
-		flags |= os.O_EXCL
-	}
-
-	if pflags.Trunc {
-		flags |= os.O_TRUNC
-	}
-
-	if pflags.Read && pflags.Write {
-		flags |= os.O_RDWR
-	} else if pflags.Read {
-		flags |= os.O_RDONLY
-	} else if pflags.Write {
-		flags |= os.O_WRONLY
-	}
-
-	return os.OpenFile(filepath.Join(s.root, r.Filepath), flags, 0644)
-}
-
-func (s *sftpFileSystem) Fileread(r *sftp.Request) (io.ReaderAt, error) {
-	f, err := s.openFile(r)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return f, nil
-}
-
-func (s *sftpFileSystem) Filewrite(r *sftp.Request) (io.WriterAt, error) {
-	f, err := s.openFile(r)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return f, nil
-}
-
-type listerAt []fs.FileInfo
-
-func (l listerAt) ListAt(ls []fs.FileInfo, offset int64) (int, error) {
-	if offset >= int64(len(l)) {
-		return 0, io.EOF
-	}
-
-	n := copy(ls, l[offset:])
-
-	if n < len(ls) {
-		return n, io.EOF
-	}
-
-	return n, nil
 }
