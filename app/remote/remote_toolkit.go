@@ -9,13 +9,14 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var kubectlCommand = &cli.Command{
-	Name:  "kubectl",
-	Usage: "run cluster kubectl",
+var toolkitCommand = &cli.Command{
+	Name:  "toolkit",
+	Usage: "run cluster toolkit",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
@@ -27,26 +28,21 @@ var kubectlCommand = &cli.Command{
 
 		namespace := app.Namespace(c)
 
-		return runKubectl(c.Context, client, namespace)
+		return runToolKit(c.Context, client, namespace)
 	},
 }
 
-func runKubectl(ctx context.Context, client kubernetes.Client, namespace string) error {
+func runToolKit(ctx context.Context, client kubernetes.Client, namespace string) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}
 
-	name := "loop-kubectl-" + uuid.New().String()[0:7]
+	name := "loop-toolkit-" + uuid.New().String()[0:7]
 
 	creds, err := client.Credentials()
 
 	if err != nil {
 		return err
-	}
-
-	args := []string{
-		"get",
-		"nodes",
 	}
 
 	if _, err := client.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
@@ -74,9 +70,9 @@ func runKubectl(ctx context.Context, client kubernetes.Client, namespace string)
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name: "kubectl",
+					Name: "toolkit",
 
-					Image:           "bitnami/kubectl",
+					Image:           "adrianliechti/loop-toolkit",
 					ImagePullPolicy: corev1.PullAlways,
 
 					Env: []corev1.EnvVar{
@@ -90,7 +86,9 @@ func runKubectl(ctx context.Context, client kubernetes.Client, namespace string)
 						},
 					},
 
-					Args: args,
+					TTY:       true,
+					Stdin:     true,
+					StdinOnce: true,
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -136,5 +134,5 @@ func runKubectl(ctx context.Context, client kubernetes.Client, namespace string)
 		return err
 	}
 
-	return client.PodAttach(ctx, namespace, name, "kubectl", true, nil, os.Stdout, os.Stderr)
+	return client.PodAttach(ctx, namespace, name, "toolkit", true, os.Stdin, os.Stdout, os.Stderr)
 }
