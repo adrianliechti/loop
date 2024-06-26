@@ -16,8 +16,11 @@ type Client interface {
 	kubernetes.Interface
 
 	ConfigPath() string
+
 	Config() *rest.Config
+
 	Namespace() string
+	Credentials() (*Credentials, error)
 
 	PodCIDR(ctx context.Context) (string, error)
 	ServiceCIDR(ctx context.Context) (string, error)
