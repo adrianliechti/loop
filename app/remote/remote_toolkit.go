@@ -28,11 +28,11 @@ var toolkitCommand = &cli.Command{
 
 		namespace := app.Namespace(c)
 
-		return runToolKit(c.Context, client, namespace)
+		return runToolKit(c.Context, client, namespace, nil)
 	},
 }
 
-func runToolKit(ctx context.Context, client kubernetes.Client, namespace string) error {
+func runToolKit(ctx context.Context, client kubernetes.Client, namespace string, command []string) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}
@@ -86,9 +86,8 @@ func runToolKit(ctx context.Context, client kubernetes.Client, namespace string)
 						},
 					},
 
-					TTY:       true,
-					Stdin:     true,
-					StdinOnce: true,
+					TTY:   true,
+					Stdin: true,
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -132,6 +131,10 @@ func runToolKit(ctx context.Context, client kubernetes.Client, namespace string)
 
 	if _, err := client.WaitForPod(ctx, namespace, name); err != nil {
 		return err
+	}
+
+	if len(command) > 0 {
+		return client.PodExec(ctx, namespace, name, "toolkit", command, true, os.Stdin, os.Stdout, os.Stderr)
 	}
 
 	return client.PodAttach(ctx, namespace, name, "toolkit", true, os.Stdin, os.Stdout, os.Stderr)
