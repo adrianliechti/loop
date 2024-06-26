@@ -124,27 +124,3 @@ func (c *client) Config() *rest.Config {
 func (c *client) Namespace() string {
 	return c.namespace
 }
-
-func (c *client) ExportConfig(path string) error {
-	source, err := os.Open(c.path)
-
-	if err != nil {
-		return err
-	}
-
-	defer source.Close()
-
-	destination, err := os.Create(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer destination.Close()
-
-	if _, err := io.Copy(destination, source); err != nil {
-		return err
-	}
-
-	return nil
-}

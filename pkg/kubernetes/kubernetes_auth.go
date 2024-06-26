@@ -1,14 +1,18 @@
 package kubernetes
 
 import (
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"k8s.io/client-go/transport"
 )
 
 type Credentials struct {
-	Host    string
+	Host string
+	Port string
+
 	CAData  []byte
 	APIPath string
 
@@ -18,8 +22,32 @@ type Credentials struct {
 func (c *client) Credentials() (*Credentials, error) {
 	rc := c.Config()
 
+	host := "localhost"
+	port := "443"
+
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host = h
+		port = p
+	}
+
+	if val, err := url.Parse(rc.Host); err == nil {
+		port = val.Port()
+
+		if port == "" {
+			port = "443"
+		}
+
+		host = val.Hostname()
+
+		if host == "" {
+			host = "localhost"
+		}
+	}
+
 	result := &Credentials{
-		Host:    rc.Host,
+		Host: host,
+		Port: port,
+
 		CAData:  rc.CAData,
 		APIPath: rc.APIPath,
 	}
