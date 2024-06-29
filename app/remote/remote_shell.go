@@ -70,7 +70,7 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 		return err
 	}
 
-	cli.Infof("Starting ssh server...")
+	cli.Infof("Starting sftp server...")
 	if err := startServer(ctx, sftpport, path); err != nil {
 		return err
 	}
@@ -216,8 +216,15 @@ func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name st
 	}
 
 	options := []ssh.Option{
-		ssh.WithRemotePortForward(ssh.PortForward{LocalPort: port, RemotePort: 2222}),
 		ssh.WithCommand("mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && /bin/sleep infinity"),
+	}
+
+	if port > 0 {
+		options = append(options, ssh.WithRemotePortForward(ssh.PortForward{LocalPort: port, RemotePort: 2222}))
+	}
+
+	for s, t := range tunnels {
+		options = append(options, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: s, RemotePort: t}))
 	}
 
 	c := ssh.New(fmt.Sprintf("127.0.0.1:%d", localport), options...)

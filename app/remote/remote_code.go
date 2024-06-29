@@ -88,7 +88,7 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		return err
 	}
 
-	cli.Infof("Starting ssh server...")
+	cli.Infof("Starting sftp server...")
 	if err := startServer(ctx, sftpport, path); err != nil {
 		return err
 	}

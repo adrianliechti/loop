@@ -48,6 +48,12 @@ type PortForward struct {
 
 type Option func(*Client)
 
+func WithUsername(username string) Option {
+	return func(c *Client) {
+		c.username = username
+	}
+}
+
 func WithStdin(r io.Reader) Option {
 	return func(c *Client) {
 		c.stdin = r
@@ -127,6 +133,18 @@ func (c *Client) Run(ctx context.Context) error {
 
 	defer session.Close()
 
+	for _, p := range c.localPortForwards {
+		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
+
+		if err != nil {
+			return err
+		}
+
+		defer listener.Close()
+
+		go tunnelConnections(listener, client, fmt.Sprintf("%s:%d", p.RemoteAddr, p.RemotePort))
+	}
+
 	for _, p := range c.remotePortForwards {
 		listener, err := client.Listen("tcp", fmt.Sprintf("%s:%d", p.RemoteAddr, p.RemotePort))
 
@@ -136,7 +154,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 		defer listener.Close()
 
-		go handleConections(listener, fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
+		go tunnelConnections(listener, &net.Dialer{}, fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
 	}
 
 	if c.command != "" {
@@ -147,7 +165,15 @@ func (c *Client) Run(ctx context.Context) error {
 	return nil
 }
 
-func handleConections(l net.Listener, addr string) error {
+type dialer interface {
+	Dial(network, addr string) (net.Conn, error)
+}
+
+type listener interface {
+	Accept() (net.Conn, error)
+}
+
+func tunnelConnections(l listener, d dialer, addr string) error {
 	for {
 		conn, err := l.Accept()
 
@@ -157,20 +183,20 @@ func handleConections(l net.Listener, addr string) error {
 
 		defer conn.Close()
 
-		go handleConnection(conn, addr)
+		go tunnelConnection(conn, d, addr)
 	}
 }
 
-func handleConnection(conn net.Conn, addr string) error {
-	l, err := net.Dial("tcp", addr)
+func tunnelConnection(c net.Conn, d dialer, addr string) error {
+	conn, err := d.Dial("tcp", addr)
 
 	if err != nil {
 		return err
 	}
 
-	defer l.Close()
+	defer conn.Close()
 
-	return tunnel(l, conn)
+	return tunnel(conn, c)
 }
 
 func tunnel(local, remote net.Conn) error {
