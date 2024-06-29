@@ -27,6 +27,10 @@ var toolkitCommand = &cli.Command{
 
 		namespace := app.Namespace(c)
 
+		if namespace == "" {
+			namespace = client.Namespace()
+		}
+
 		return runToolKit(c.Context, client, namespace, nil)
 	},
 }

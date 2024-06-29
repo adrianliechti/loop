@@ -54,6 +54,10 @@ var shellCommand = &cli.Command{
 			image = "debian"
 		}
 
+		if namespace == "" {
+			namespace = client.Namespace()
+		}
+
 		return runShell(c.Context, client, namespace, image, true, true, path, nil)
 	},
 }
