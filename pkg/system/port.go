@@ -3,25 +3,7 @@ package system
 import (
 	"fmt"
 	"net"
-	"time"
 )
-
-func OpenPort(port int) bool {
-	host := "localhost"
-
-	target := fmt.Sprintf("%s:%d", host, port)
-	timeout := 5 * time.Second
-
-	conn, err := net.DialTimeout("tcp", target, timeout)
-
-	if err != nil {
-		return false
-	}
-
-	defer conn.Close()
-
-	return true
-}
 
 func FreePort(preference int) (int, error) {
 	if port, err := freePort(preference); err == nil {
