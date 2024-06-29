@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/expose"
@@ -45,6 +46,10 @@ func initApp() cli.App {
 		Version: version,
 
 		HideHelpCommand: true,
+
+		Flags: []cli.Flag{
+			app.KubeconfigFlag,
+		},
 
 		Commands: []*cli.Command{
 			application.Command,

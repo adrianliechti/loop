@@ -25,11 +25,7 @@ var codeCommand = &cli.Command{
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
-		&cli.StringFlag{
-			Name:  app.PortFlag.Name,
-			Usage: "local server port",
-		},
+
 		&cli.StringFlag{
 			Name:  "stack",
 			Usage: "language stack",
@@ -82,14 +78,14 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		namespace = client.Namespace()
 	}
 
-	sshdPort, err := system.FreePort(0)
+	sftpport, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	cli.Infof("Starting ssh server...")
-	if err := startServer(ctx, sshdPort, path, ports); err != nil {
+	cli.Infof("Starting sftp server...")
+	if err := startServer(ctx, sftpport, path); err != nil {
 		return err
 	}
 
@@ -115,7 +111,7 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return runTunnel(ctx, client, namespace, pod, sshdPort, tunnelPorts)
+	return runTunnel(ctx, client, namespace, pod, sftpport, tunnelPorts)
 }
 
 func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, image string) (string, error) {
