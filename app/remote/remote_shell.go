@@ -32,10 +32,7 @@ var shellCommand = &cli.Command{
 			Usage: "container image to start",
 		},
 
-		// &cli.StringSliceFlag{
-		// 	Name:  app.PortsFlag.Name,
-		// 	Usage: "forwarded ports",
-		// },
+		app.PortsFlag,
 	},
 
 	Action: func(c *cli.Context) error {
@@ -58,7 +55,9 @@ var shellCommand = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		return runShell(c.Context, client, namespace, image, true, true, path, nil)
+		tunnels, _ := app.Ports(c)
+
+		return runShell(c.Context, client, namespace, image, true, true, path, tunnels)
 	},
 }
 

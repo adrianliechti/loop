@@ -31,10 +31,7 @@ var codeCommand = &cli.Command{
 			Usage: "language stack",
 		},
 
-		// &cli.StringSliceFlag{
-		// 	Name:  app.PortsFlag.Name,
-		// 	Usage: "forwarded ports",
-		// },
+		app.PortsFlag,
 	},
 
 	Action: func(c *cli.Context) error {
@@ -66,14 +63,16 @@ var codeCommand = &cli.Command{
 
 		stack = strings.ToLower(stack)
 
-		port := app.MustPortOrRandom(c, 3000)
+		port := app.MustPortOrRandom(c, 8888)
 		namespace := app.Namespace(c)
 
 		if namespace == "" {
 			namespace = client.Namespace()
 		}
 
-		return runCode(c.Context, client, stack, port, namespace, path, nil)
+		tunnels, _ := app.Ports(c)
+
+		return runCode(c.Context, client, stack, port, namespace, path, tunnels)
 	},
 }
 
@@ -109,13 +108,15 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
 	})
 
-	tunnelPorts := map[int]int{
-		port: 3000,
+	if ports == nil {
+		ports = map[int]int{}
 	}
+
+	ports[port] = 3000
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return runTunnel(ctx, client, namespace, pod, sftpport, tunnelPorts)
+	return runTunnel(ctx, client, namespace, pod, sftpport, ports)
 }
 
 func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, image string) (string, error) {

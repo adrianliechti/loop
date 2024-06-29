@@ -2,10 +2,7 @@ package expose
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -30,11 +27,7 @@ var Command = &cli.Command{
 		app.NameFlag,
 		app.NamespaceFlag,
 
-		&cli.StringSliceFlag{
-			Name:     "port",
-			Usage:    "local port(s) to expose",
-			Required: true,
-		},
+		app.PortsFlag,
 	},
 
 	Action: func(c *cli.Context) error {
@@ -47,35 +40,7 @@ var Command = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		ports := c.StringSlice("port")
-
-		tunnels := map[int]int{}
-
-		for _, p := range ports {
-			pair := strings.Split(p, ":")
-
-			if len(pair) > 2 {
-				return errors.New("invalid port mapping")
-			}
-
-			if len(pair) == 1 {
-				pair = []string{pair[0], pair[0]}
-			}
-
-			source, err := strconv.Atoi(pair[0])
-
-			if err != nil {
-				return err
-			}
-
-			target, err := strconv.Atoi(pair[1])
-
-			if err != nil {
-				return err
-			}
-
-			tunnels[source] = target
-		}
+		tunnels := app.MustPorts(c)
 
 		return createTCPTunnel(c.Context, client, namespace, name, tunnels)
 	},

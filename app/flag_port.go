@@ -2,6 +2,8 @@ package app
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/system"
@@ -26,17 +28,51 @@ func MustPort(c *cli.Context) int {
 	return port
 }
 
-var PortsFlag = &cli.IntSliceFlag{
+var PortsFlag = &cli.StringSliceFlag{
 	Name:  "port",
-	Usage: "port",
+	Usage: "port mappings",
 }
 
-func Ports(c *cli.Context) []int {
-	return c.IntSlice(PortFlag.Name)
+func Ports(c *cli.Context) (map[int]int, error) {
+	s := c.StringSlice(PortsFlag.Name)
+
+	result := map[int]int{}
+
+	for _, p := range s {
+		pair := strings.Split(p, ":")
+
+		if len(pair) > 2 {
+			return nil, errors.New("invalid port mapping")
+		}
+
+		if len(pair) == 1 {
+			pair = []string{pair[0], pair[0]}
+		}
+
+		source, err := strconv.Atoi(pair[0])
+
+		if err != nil {
+			return nil, err
+		}
+
+		target, err := strconv.Atoi(pair[1])
+
+		if err != nil {
+			return nil, err
+		}
+
+		result[source] = target
+	}
+
+	return result, nil
 }
 
-func MustPorts(c *cli.Context) []int {
-	ports := Ports(c)
+func MustPorts(c *cli.Context) map[int]int {
+	ports, err := Ports(c)
+
+	if err != nil {
+		cli.Fatal(err)
+	}
 
 	if len(ports) == 0 {
 		cli.Fatal(errors.New("ports missing"))
