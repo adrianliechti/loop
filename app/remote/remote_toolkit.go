@@ -20,7 +20,6 @@ var toolkitCommand = &cli.Command{
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
 	},
 
 	Action: func(c *cli.Context) error {
