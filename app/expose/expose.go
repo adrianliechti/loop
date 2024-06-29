@@ -29,7 +29,6 @@ var Command = &cli.Command{
 	Flags: []cli.Flag{
 		app.NameFlag,
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
 
 		&cli.StringSliceFlag{
 			Name:     "port",

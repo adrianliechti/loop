@@ -17,7 +17,6 @@ var Command = &cli.Command{
 	Flags: []cli.Flag{
 		app.ScopeFlag,
 		app.NamespacesFlag,
-		app.KubeconfigFlag,
 	},
 
 	Action: func(c *cli.Context) error {
