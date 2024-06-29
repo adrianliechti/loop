@@ -2,24 +2,21 @@ package remote
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/sftp"
-	sshtool "github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
-	"github.com/google/uuid"
 
-	"github.com/gliderlabs/ssh"
+	sshtool "github.com/adrianliechti/loop/pkg/ssh"
+
+	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,50 +99,15 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 }
 
 func startServer(ctx context.Context, port int, path string, ports map[int]int) error {
-	s := ssh.Server{
-		Addr: fmt.Sprintf("127.0.0.1:%d", port),
-
-		Handler: func(s ssh.Session) {
-			io.WriteString(s, "SSH server operational. Use SFTP for file transfer.\n")
-		},
-
-		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(s ssh.Session) {
-
-				srv := sftp.New(s, path)
-
-				if err := srv.Serve(); err != nil {
-					srv.Close()
-				}
-			},
-		},
-	}
+	s := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
 
 	go func() {
 		<-ctx.Done()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if err := s.Shutdown(ctx); err != nil {
-			if errors.Is(err, ssh.ErrServerClosed) {
-				return
-			}
-
-			log.Println("could not stop server", "error", err)
-		}
-
-		if err := s.Close(); err != nil {
-			log.Println("could not close server", "error", err)
-		}
+		s.Close()
 	}()
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil {
-			if errors.Is(err, ssh.ErrServerClosed) {
-				return
-			}
-
 			log.Println("could not start server", "error", err)
 		}
 	}()
