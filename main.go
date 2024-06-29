@@ -8,10 +8,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/proxy"
 	"github.com/adrianliechti/loop/app/remote"
+	"github.com/adrianliechti/loop/app/server"
 	"github.com/adrianliechti/loop/pkg/cli"
 
 	"github.com/lmittmann/tint"
@@ -44,6 +47,10 @@ func initApp() cli.App {
 
 		HideHelpCommand: true,
 
+		Flags: []cli.Flag{
+			app.KubeconfigFlag,
+		},
+
 		Commands: []*cli.Command{
 			application.Command,
 
@@ -51,6 +58,9 @@ func initApp() cli.App {
 
 			remote.Command,
 			expose.Command,
+
+			proxy.Command,
+			server.Command,
 		},
 	}
 }

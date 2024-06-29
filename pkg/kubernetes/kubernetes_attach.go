@@ -11,19 +11,17 @@ import (
 	"k8s.io/kubectl/pkg/util/term"
 )
 
-func (c *client) PodExec(ctx context.Context, namespace, name, container string, command []string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error {
-	req := c.CoreV1().RESTClient().Post().Resource("pods").Name(name).Namespace(namespace).SubResource("exec")
+func (c *client) PodAttach(ctx context.Context, namespace, name, container string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error {
+	req := c.CoreV1().RESTClient().Post().Resource("pods").Name(name).Namespace(namespace).SubResource("attach")
 
 	req.VersionedParams(
-		&corev1.PodExecOptions{
+		&corev1.PodAttachOptions{
 			Container: container,
 			TTY:       tty,
 
 			Stdin:  stdin != nil,
 			Stdout: stdout != nil,
 			Stderr: stderr != nil,
-
-			Command: command,
 		},
 		scheme.ParameterCodec,
 	)

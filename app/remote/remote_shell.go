@@ -2,25 +2,19 @@ package remote
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"os/exec"
-	"time"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/sftp"
-	sshtool "github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
-	"github.com/google/uuid"
 
-	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,11 +22,10 @@ import (
 
 var shellCommand = &cli.Command{
 	Name:  "shell",
-	Usage: "run cluster shell",
+	Usage: "run cluster Shell",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
 
 		&cli.StringFlag{
 			Name:  "image",
@@ -70,14 +63,14 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 		namespace = client.Namespace()
 	}
 
-	sshdPort, err := system.FreePort(0)
+	sftpport, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	cli.Infof("Starting ssh server...")
-	if err := startServer(ctx, sshdPort, path, ports); err != nil {
+	cli.Infof("Starting sftp server...")
+	if err := startServer(ctx, sftpport, path); err != nil {
 		return err
 	}
 
@@ -94,59 +87,24 @@ func runShell(ctx context.Context, client kubernetes.Client, namespace, image st
 	}()
 
 	go func() {
-		if err := runTunnel(ctx, client, namespace, pod, sshdPort, ports); err != nil {
+		if err := runTunnel(ctx, client, namespace, pod, sftpport, ports); err != nil {
 			cli.Error(err)
 		}
 	}()
 
-	return kubectl.Attach(ctx, client.ConfigPath(), namespace, pod, "shell")
+	return client.PodAttach(ctx, namespace, pod, "shell", tty, os.Stdin, os.Stdout, os.Stderr)
 }
 
-func startServer(ctx context.Context, port int, path string, ports map[int]int) error {
-	s := ssh.Server{
-		Addr: fmt.Sprintf("127.0.0.1:%d", port),
-
-		Handler: func(s ssh.Session) {
-			io.WriteString(s, "SSH server operational. Use SFTP for file transfer.\n")
-		},
-
-		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(s ssh.Session) {
-
-				srv := sftp.New(s, path)
-
-				if err := srv.Serve(); err != nil {
-					srv.Close()
-				}
-			},
-		},
-	}
+func startServer(ctx context.Context, port int, path string) error {
+	s := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
 
 	go func() {
 		<-ctx.Done()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if err := s.Shutdown(ctx); err != nil {
-			if errors.Is(err, ssh.ErrServerClosed) {
-				return
-			}
-
-			log.Println("could not stop server", "error", err)
-		}
-
-		if err := s.Close(); err != nil {
-			log.Println("could not close server", "error", err)
-		}
+		s.Close()
 	}()
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil {
-			if errors.Is(err, ssh.ErrServerClosed) {
-				return
-			}
-
 			log.Println("could not start server", "error", err)
 		}
 	}()
@@ -250,45 +208,39 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 }
 
 func runTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, port int, tunnels map[int]int) error {
-	ssh, _, err := sshtool.Info(ctx)
+	localport, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	self, err := os.Executable()
+	options := []ssh.Option{
+		ssh.WithCommand("mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && /bin/sleep infinity"),
+	}
 
-	if err != nil {
+	if port > 0 {
+		options = append(options, ssh.WithRemotePortForward(ssh.PortForward{LocalPort: port, RemotePort: 2222}))
+	}
+
+	for s, t := range tunnels {
+		options = append(options, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: s, RemotePort: t}))
+	}
+
+	c := ssh.New(fmt.Sprintf("127.0.0.1:%d", localport), options...)
+
+	ready := make(chan struct{})
+
+	go func() {
+		<-ready
+
+		if err := c.Run(ctx); err != nil {
+			cli.Error(err)
+		}
+	}()
+
+	if err := client.PodPortForward(ctx, namespace, name, "", map[int]int{localport: 22}, ready); err != nil {
 		return err
 	}
 
-	args := []string{
-		"-q",
-		"-t",
-		"-l", "root",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", fmt.Sprintf("ProxyCommand=%s remote stream --kubeconfig %s --namespace %s --name %s --container ssh --port 22", self, client.ConfigPath(), namespace, name),
-		"localhost",
-	}
-
-	command := "mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && exec /bin/sh"
-
-	if port != 0 {
-		args = append(args, "-R", fmt.Sprintf("127.0.0.1:2222:127.0.0.1:%d", port))
-	}
-
-	for source, target := range tunnels {
-		args = append(args, "-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", source, target))
-	}
-
-	if command != "" {
-		args = append(args, command)
-	}
-
-	cmd := exec.CommandContext(ctx, ssh, args...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-
-	return cmd.Run()
+	return nil
 }

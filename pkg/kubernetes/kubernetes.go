@@ -16,8 +16,11 @@ type Client interface {
 	kubernetes.Interface
 
 	ConfigPath() string
+
 	Config() *rest.Config
+
 	Namespace() string
+	Credentials() (*Credentials, error)
 
 	PodCIDR(ctx context.Context) (string, error)
 	ServiceCIDR(ctx context.Context) (string, error)
@@ -28,6 +31,7 @@ type Client interface {
 	ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error
 
 	PodExec(ctx context.Context, namespace, name, container string, command []string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error
+	PodAttach(ctx context.Context, namespace, name, container string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error
 	PodPortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error
 
 	WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
@@ -119,28 +123,4 @@ func (c *client) Config() *rest.Config {
 
 func (c *client) Namespace() string {
 	return c.namespace
-}
-
-func (c *client) ExportConfig(path string) error {
-	source, err := os.Open(c.path)
-
-	if err != nil {
-		return err
-	}
-
-	defer source.Close()
-
-	destination, err := os.Create(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer destination.Close()
-
-	if _, err := io.Copy(destination, source); err != nil {
-		return err
-	}
-
-	return nil
 }

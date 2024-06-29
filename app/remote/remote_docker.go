@@ -20,11 +20,10 @@ import (
 
 var dockerCommand = &cli.Command{
 	Name:  "docker",
-	Usage: "run cluster Docker daemon",
+	Usage: "run cluster Docker",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
 	},
 
 	Action: func(c *cli.Context) error {

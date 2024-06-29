@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/kubectl"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/system"
 
 	"github.com/google/uuid"
 
@@ -31,7 +29,6 @@ var Command = &cli.Command{
 	Flags: []cli.Flag{
 		app.NameFlag,
 		app.NamespaceFlag,
-		app.KubeconfigFlag,
 
 		&cli.StringSliceFlag{
 			Name:     "port",
@@ -197,8 +194,6 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 	go func() {
 		<-ready
 
-		cli.Info("Tunnel ready")
-
 		for s, t := range options.ServicePorts {
 			cli.Infof("Forwarding tcp://%s.%s:%d => tcp://localhost:%d", service.Name, namespace, t, s)
 		}
@@ -216,38 +211,35 @@ func deleteTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 }
 
 func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports map[int]int, readyChan chan struct{}) error {
-	ssh, _, err := ssh.Info(ctx)
+	localport, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	kubectl, _, err := kubectl.Info(ctx)
-
-	if err != nil {
-		return err
-	}
-
-	args := []string{
-		"-q",
-		"-l", "root",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", fmt.Sprintf("ProxyCommand=%s --kubeconfig %s exec -i -n %s %s -- nc 127.0.0.1 22", kubectl, client.ConfigPath(), namespace, name),
-		"localhost",
-		"-N",
-	}
+	options := []ssh.Option{}
 
 	for s, t := range ports {
-		args = append(args, "-R", fmt.Sprintf("%d:127.0.0.1:%d", t, s))
+		options = append(options, ssh.WithRemotePortForward(ssh.PortForward{LocalPort: t, RemotePort: s}))
 	}
 
-	cmd := exec.CommandContext(ctx, ssh, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	c := ssh.New(fmt.Sprintf("127.0.0.1:%d", localport), options...)
 
-	close(readyChan)
+	ready := make(chan struct{})
 
-	return cmd.Run()
+	go func() {
+		<-ready
+
+		close(readyChan)
+
+		if err := c.Run(ctx); err != nil {
+			cli.Error(err)
+		}
+	}()
+
+	if err := client.PodPortForward(ctx, namespace, name, "", map[int]int{localport: 22}, ready); err != nil {
+		return err
+	}
+
+	return nil
 }
