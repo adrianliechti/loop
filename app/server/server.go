@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 var Command = &cli.Command{
@@ -56,28 +56,22 @@ func startWebServer(ctx context.Context, port int, index string, spa bool) error
 		port = 3000
 	}
 
-	app := fiber.New(fiber.Config{
-		DisableStartupMessage: true,
-	})
+	e := echo.New()
+	e.HideBanner = true
 
-	app.Static("/", root, fiber.Static{
-		Browse: true,
-		Index:  index,
-	})
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	if spa {
-		app.Get("/*", func(ctx *fiber.Ctx) error {
-			return ctx.SendFile(path.Join(root, index))
-		})
-	}
+	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+		Root:  root,
+		HTML5: spa,
+	}))
 
 	go func() {
 		<-ctx.Done()
 
-		app.Shutdown()
+		e.Shutdown(context.Background())
 	}()
 
-	cli.Infof("Starting server at port %d", port)
-
-	return app.Listen(fmt.Sprintf("127.0.0.1:%d", port))
+	return e.Start(fmt.Sprintf("127.0.0.1:%d", port))
 }
