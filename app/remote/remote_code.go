@@ -44,6 +44,7 @@ var codeCommand = &cli.Command{
 		}
 
 		stacks := []string{
+			"default",
 			"dotnet",
 			"golang",
 			"java",
@@ -61,7 +62,9 @@ var codeCommand = &cli.Command{
 			stack = stacks[i]
 		}
 
-		stack = strings.ToLower(stack)
+		if stack == "latest" || stack == "default" {
+			stack = ""
+		}
 
 		port := app.MustPortOrRandom(c, 8888)
 		namespace := app.Namespace(c)
@@ -81,6 +84,12 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		namespace = client.Namespace()
 	}
 
+	image := "adrianliechti/loop-code"
+
+	if stack != "" {
+		image += ":" + strings.ToLower(stack)
+	}
+
 	sftpport, err := system.FreePort(0)
 
 	if err != nil {
@@ -93,7 +102,7 @@ func runCode(ctx context.Context, client kubernetes.Client, stack string, port i
 	}
 
 	cli.Infof("Starting remote VSCode...")
-	pod, err := startCodeContainer(ctx, client, namespace, "adrianliechti/loop-code:"+stack)
+	pod, err := startCodeContainer(ctx, client, namespace, image)
 
 	if err != nil {
 		return err
@@ -223,7 +232,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 				{
 					Name: "docker",
 
-					Image:           "docker:24-dind-rootless",
+					Image:           "docker:27-dind-rootless",
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
