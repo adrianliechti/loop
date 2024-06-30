@@ -52,11 +52,11 @@ var Command = &cli.Command{
 
 		tunnels, _ := app.Ports(c)
 
-		return RunShell(c.Context, client, namespace, image, true, true, path, tunnels)
+		return Run(c.Context, client, namespace, image, true, true, path, tunnels)
 	},
 }
 
-func RunShell(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
+func Run(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}

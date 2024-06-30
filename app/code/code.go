@@ -75,11 +75,11 @@ var Command = &cli.Command{
 
 		tunnels, _ := app.Ports(c)
 
-		return RunCode(c.Context, client, stack, port, namespace, path, tunnels)
+		return Run(c.Context, client, stack, port, namespace, path, tunnels)
 	},
 }
 
-func RunCode(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
+func Run(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}
@@ -93,7 +93,7 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 	name := "loop-code-" + uuid.New().String()[0:7]
 
 	cli.Infof("Starting VSCode pod (%s/%s)...", namespace, name)
-	pod, err := startCodeContainer(ctx, client, namespace, name, image)
+	pod, err := startPod(ctx, client, namespace, name, image)
 
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	defer func() {
 		cli.Infof("Stopping VSCode pod (%s/%s)...", pod.Namespace, pod.Name)
-		stopCodeContainer(context.Background(), client, pod.Namespace, pod.Name)
+		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
 	time.AfterFunc(5*time.Second, func() {
@@ -119,7 +119,7 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 	return remote.Run(ctx, client, pod.Namespace, pod.Name, path, ports)
 }
 
-func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
+func startPod(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
 	serviceaccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -272,7 +272,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 	return client.WaitForPod(ctx, namespace, name)
 }
 
-func stopCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	if err := client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		// return err
 	}
