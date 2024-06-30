@@ -15,8 +15,6 @@ import (
 type Client interface {
 	kubernetes.Interface
 
-	ConfigPath() string
-
 	Config() *rest.Config
 
 	Namespace() string
@@ -43,21 +41,25 @@ type Client interface {
 }
 
 func New() (Client, error) {
-	return NewFromConfig("")
+	return NewFromFile("")
 }
 
-func NewFromConfig(path string) (Client, error) {
-	if path == "" {
-		path = ConfigPath()
+func NewFromFile(kubeconfig string) (Client, error) {
+	if kubeconfig == "" {
+		kubeconfig = ConfigPath()
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(kubeconfig)
 
 	if err != nil {
 		return nil, err
 	}
 
-	config, err := clientcmd.NewClientConfigFromBytes(data)
+	return NewFromBytes(data)
+}
+
+func NewFromBytes(kubeconfig []byte) (Client, error) {
+	config, err := clientcmd.NewClientConfigFromBytes(kubeconfig)
 
 	if err != nil {
 		return nil, err
@@ -75,16 +77,19 @@ func NewFromConfig(path string) (Client, error) {
 		ns = "default"
 	}
 
-	cs, err := kubernetes.NewForConfig(c)
+	return NewFromConfig(c, ns)
+}
+
+func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
+	cs, err := kubernetes.NewForConfig(config)
 
 	if err != nil {
 		return nil, err
 	}
 
 	client := &client{
-		path:      path,
-		config:    c,
-		namespace: ns,
+		config:    config,
+		namespace: namespace,
 
 		Interface: cs,
 	}
@@ -95,7 +100,6 @@ func NewFromConfig(path string) (Client, error) {
 type client struct {
 	kubernetes.Interface
 
-	path      string
 	config    *rest.Config
 	namespace string
 }
@@ -112,10 +116,6 @@ func ConfigPath() string {
 	}
 
 	return ""
-}
-
-func (c *client) ConfigPath() string {
-	return c.path
 }
 
 func (c *client) Config() *rest.Config {

@@ -13,7 +13,7 @@ var KubeconfigFlag = &cli.StringFlag{
 func Client(c *cli.Context) (kubernetes.Client, error) {
 	kubeconfig := c.String(KubeconfigFlag.Name)
 
-	return kubernetes.NewFromConfig(kubeconfig)
+	return kubernetes.NewFromFile(kubeconfig)
 }
 
 func MustClient(c *cli.Context) kubernetes.Client {
