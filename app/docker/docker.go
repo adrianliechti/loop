@@ -1,4 +1,4 @@
-package remote
+package docker
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var dockerCommand = &cli.Command{
+var Command = &cli.Command{
 	Name:  "docker",
 	Usage: "run cluster Docker",
 
@@ -45,6 +45,8 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		namespace = client.Namespace()
 	}
 
+	name := "loop-docker-" + uuid.New().String()[0:7]
+
 	docker := "docker"
 
 	loopContext := "loop"
@@ -59,8 +61,6 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		exec.Command(docker, "context", "use", currentContext).Run()
 		exec.Command(docker, "context", "rm", loopContext).Run()
 	}()
-
-	name := "loop-docker-" + uuid.New().String()[0:7]
 
 	defer func() {
 		cli.Infof("Stopping Docker pod (%s/%s)...", namespace, name)
@@ -98,20 +98,10 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 	return nil
 }
 
-func daemonLabels(name string) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":     "loop-docker",
-		"app.kubernetes.io/instance": name,
-	}
-}
-
 func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name string) (*corev1.Pod, error) {
-	labels := daemonLabels(name)
-
-	if _, err := client.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
+			Name: name,
 		},
 
 		Spec: corev1.PodSpec{
@@ -178,7 +168,9 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 
 			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
-	}, metav1.CreateOptions{}); err != nil {
+	}
+
+	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		return nil, err
 	}
 

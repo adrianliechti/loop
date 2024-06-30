@@ -1,4 +1,4 @@
-package remote
+package container
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var shellCommand = &cli.Command{
-	Name:  "shell",
-	Usage: "run cluster Shell",
+var Command = &cli.Command{
+	Name:  "container",
+	Usage: "run cluster Container",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

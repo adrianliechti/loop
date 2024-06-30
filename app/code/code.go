@@ -1,4 +1,4 @@
-package remote
+package code
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var codeCommand = &cli.Command{
+var Command = &cli.Command{
 	Name:  "code",
 	Usage: "run cluster VS Code",
 
@@ -100,8 +100,8 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 	}
 
 	defer func() {
-		cli.Infof("Stopping VSCode pod (%s/%s)...", namespace, pod)
-		stopCodeContainer(context.Background(), client, namespace, pod)
+		cli.Infof("Stopping VSCode pod (%s/%s)...", pod.Namespace, pod.Name)
+		stopCodeContainer(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
 	time.AfterFunc(5*time.Second, func() {
@@ -116,10 +116,10 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return remote.Run(ctx, client, namespace, pod, path, ports)
+	return remote.Run(ctx, client, pod.Namespace, pod.Name, path, ports)
 }
 
-func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name, image string) (string, error) {
+func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
 	serviceaccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -127,7 +127,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 	}
 
 	if _, err := client.CoreV1().ServiceAccounts(namespace).Create(ctx, serviceaccount, metav1.CreateOptions{}); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	clusterrolebinding := &rbacv1.ClusterRoleBinding{
@@ -151,7 +151,7 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 	}
 
 	if _, err := client.RbacV1().ClusterRoleBindings().Create(ctx, clusterrolebinding, metav1.CreateOptions{}); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	pod := &corev1.Pod{
@@ -262,18 +262,14 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 	}
 
 	if err := remote.UpdatePod(pod, "/mnt"); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if _, err := client.WaitForPod(ctx, namespace, name); err != nil {
-		return "", err
-	}
-
-	return name, nil
+	return client.WaitForPod(ctx, namespace, name)
 }
 
 func stopCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name string) error {

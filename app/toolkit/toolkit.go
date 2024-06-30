@@ -1,4 +1,4 @@
-package remote
+package toolkit
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var toolkitCommand = &cli.Command{
+var Command = &cli.Command{
 	Name:  "toolkit",
-	Usage: "run cluster toolkit",
+	Usage: "run cluster tool",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
@@ -31,7 +31,8 @@ var toolkitCommand = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		return RunToolKit(c.Context, client, namespace, nil)
+		command := c.Args().Slice()
+		return RunToolKit(c.Context, client, namespace, command)
 	},
 }
 

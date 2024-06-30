@@ -10,11 +10,12 @@ import (
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
+	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
+	"github.com/adrianliechti/loop/app/container"
+	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
-	"github.com/adrianliechti/loop/app/proxy"
-	"github.com/adrianliechti/loop/app/remote"
-	"github.com/adrianliechti/loop/app/server"
+	"github.com/adrianliechti/loop/app/toolkit"
 	"github.com/adrianliechti/loop/pkg/cli"
 
 	"github.com/lmittmann/tint"
@@ -54,13 +55,14 @@ func initApp() cli.App {
 		Commands: []*cli.Command{
 			application.Command,
 
+			container.Command,
+			toolkit.Command,
+			code.Command,
+
 			connect.Command,
+			docker.Command,
 
-			remote.Command,
 			expose.Command,
-
-			proxy.Command,
-			server.Command,
 		},
 	}
 }
