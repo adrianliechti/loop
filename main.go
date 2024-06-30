@@ -15,6 +15,7 @@ import (
 	"github.com/adrianliechti/loop/app/container"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/jupyter"
 	"github.com/adrianliechti/loop/app/toolkit"
 	"github.com/adrianliechti/loop/pkg/cli"
 
@@ -57,7 +58,9 @@ func initApp() cli.App {
 
 			container.Command,
 			toolkit.Command,
+
 			code.Command,
+			jupyter.Command,
 
 			connect.Command,
 			docker.Command,
