@@ -10,7 +10,7 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/system"
+	"github.com/adrianliechti/loop/pkg/remote"
 	"github.com/adrianliechti/loop/pkg/to"
 	"github.com/google/uuid"
 
@@ -90,26 +90,17 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 		image += ":" + strings.ToLower(stack)
 	}
 
-	sftpport, err := system.FreePort(0)
+	name := "loop-code-" + uuid.New().String()[0:7]
 
-	if err != nil {
-		return err
-	}
-
-	cli.Infof("Starting sftp server...")
-	if err := startServer(ctx, sftpport, path); err != nil {
-		return err
-	}
-
-	cli.Infof("Starting remote VSCode...")
-	pod, err := startCodeContainer(ctx, client, namespace, image)
+	cli.Infof("Starting VSCode pod (%s/%s)...", namespace, name)
+	pod, err := startCodeContainer(ctx, client, namespace, name, image)
 
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		cli.Infof("Stopping remote VSCode (%s/%s)...", namespace, pod)
+		cli.Infof("Stopping VSCode pod (%s/%s)...", namespace, pod)
 		stopCodeContainer(context.Background(), client, namespace, pod)
 	}()
 
@@ -125,32 +116,31 @@ func RunCode(ctx context.Context, client kubernetes.Client, stack string, port i
 
 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-	return runTunnel(ctx, client, namespace, pod, sftpport, ports)
+	return remote.Run(ctx, client, namespace, pod, path, ports)
 }
 
-func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, image string) (string, error) {
-	name := "loop-code-" + uuid.New().String()[0:7]
-
-	mountPropagationBidirectional := corev1.MountPropagationBidirectional
-	mountPropagationHostToContainer := corev1.MountPropagationHostToContainer
-
-	if _, err := client.CoreV1().ServiceAccounts(namespace).Create(ctx, &corev1.ServiceAccount{
+func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace, name, image string) (string, error) {
+	serviceaccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-	}, metav1.CreateOptions{}); err != nil {
+	}
+
+	if _, err := client.CoreV1().ServiceAccounts(namespace).Create(ctx, serviceaccount, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 
-	if _, err := client.RbacV1().ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
+	clusterrolebinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
+
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     "cluster-admin",
 		},
+
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -158,11 +148,13 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 				Namespace: namespace,
 			},
 		},
-	}, metav1.CreateOptions{}); err != nil {
+	}
+
+	if _, err := client.RbacV1().ClusterRoleBindings().Create(ctx, clusterrolebinding, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 
-	if _, err := client.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -181,15 +173,6 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 						"chown",
 						"1000:1000",
 						"/mnt",
-					},
-
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "mnt",
-							MountPath: "/mnt",
-
-							MountPropagation: &mountPropagationHostToContainer,
-						},
 					},
 				},
 			},
@@ -219,15 +202,6 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 							ContainerPort: int32(3000),
 						},
 					},
-
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "mnt",
-							MountPath: "/mnt",
-
-							MountPropagation: &mountPropagationHostToContainer,
-						},
-					},
 				},
 				{
 					Name: "docker",
@@ -254,13 +228,6 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "mnt",
-							MountPath: "/mnt",
-
-							MountPropagation: &mountPropagationHostToContainer,
-						},
-
-						{
 							Name:      "docker",
 							MountPath: "/var/lib/docker",
 						},
@@ -271,33 +238,9 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 						},
 					},
 				},
-				{
-					Name: "ssh",
-
-					Image:           "adrianliechti/loop-tunnel",
-					ImagePullPolicy: corev1.PullAlways,
-
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.Ptr(true),
-					},
-
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:             "mnt",
-							MountPath:        "/mnt",
-							MountPropagation: &mountPropagationBidirectional,
-						},
-					},
-				},
 			},
 
 			Volumes: []corev1.Volume{
-				{
-					Name: "mnt",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
 				{
 					Name: "docker",
 					VolumeSource: corev1.VolumeSource{
@@ -316,7 +259,13 @@ func startCodeContainer(ctx context.Context, client kubernetes.Client, namespace
 
 			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
-	}, metav1.CreateOptions{}); err != nil {
+	}
+
+	if err := remote.UpdatePod(pod, "/mnt"); err != nil {
+		return "", err
+	}
+
+	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 

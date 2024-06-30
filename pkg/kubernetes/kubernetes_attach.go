@@ -6,12 +6,23 @@ import (
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 )
 
 func (c *client) PodAttach(ctx context.Context, namespace, name, container string, tty bool, stdin io.Reader, stdout, stderr io.Writer) error {
+	if container == "" {
+		pod, err := c.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+
+		if err != nil {
+			return err
+		}
+
+		container = pod.Spec.Containers[0].Name
+	}
+
 	req := c.CoreV1().RESTClient().Post().Resource("pods").Name(name).Namespace(namespace).SubResource("attach")
 
 	req.VersionedParams(

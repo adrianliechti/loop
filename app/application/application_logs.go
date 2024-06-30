@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"io"
 	"os"
 
 	"github.com/adrianliechti/loop/app"
@@ -53,32 +52,11 @@ func applicationLogs(ctx context.Context, client kubernetes.Client, namespace, n
 	for _, r := range app.Resources {
 		if pod, ok := r.Object.(corev1.Pod); ok {
 			for _, container := range pod.Spec.Containers {
-				streamLogs(ctx, client, pod.Namespace, pod.Name, container.Name)
+				go client.PodLogs(ctx, pod.Namespace, pod.Name, container.Name, os.Stdout, true)
 			}
 		}
 	}
 
-	return nil
-}
-
-func streamLogs(ctx context.Context, client kubernetes.Client, namespace, name, container string) error {
-	req := client.CoreV1().Pods(namespace).GetLogs(name, &corev1.PodLogOptions{
-		Follow:    true,
-		Container: container,
-	})
-
-	reader, err := req.Stream(ctx)
-
-	if err != nil {
-		cli.Error(err)
-		return nil
-	}
-
-	defer reader.Close()
-
-	if _, err := io.Copy(os.Stdout, reader); err != nil {
-		return err
-	}
-
+	<-ctx.Done()
 	return nil
 }
