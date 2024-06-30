@@ -3,6 +3,7 @@ package catapult
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,7 +14,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
 
-	"github.com/hashicorp/go-multierror"
 	"golang.org/x/exp/maps"
 
 	corev1 "k8s.io/api/core/v1"
@@ -111,7 +111,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 			tunnel.Stop()
 
 			if err := system.UnaliasIP(ctx, tunnel.address); err != nil {
-				result = multierror.Append(result, err)
+				result = errors.Join(result, err)
 				continue
 			}
 		}
@@ -133,12 +133,12 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 			slog.InfoContext(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
 
 			if err := system.AliasIP(ctx, tunnel.address); err != nil {
-				result = multierror.Append(result, err)
+				result = errors.Join(result, err)
 				continue
 			}
 
 			if err := tunnel.Start(ctx, nil); err != nil {
-				result = multierror.Append(result, err)
+				result = errors.Join(result, err)
 				continue
 			}
 
