@@ -22,6 +22,6 @@ var kubectlCommand = &cli.Command{
 
 		command := append([]string{"kubectl"}, c.Args().Slice()...)
 
-		return runToolKit(c.Context, client, namespace, command)
+		return RunToolKit(c.Context, client, namespace, command)
 	},
 }

@@ -65,7 +65,7 @@ func applicationInfo(ctx context.Context, client kubernetes.Client, namespace, n
 			return labelRows[i][0] < labelRows[j][0]
 		})
 
-		cli.Table([]string{"LABEL", "Value"}, labelRows)
+		cli.Table([]string{"Label", "Value"}, labelRows)
 
 		if len(g.Pods) == 0 {
 			continue
@@ -79,9 +79,7 @@ func applicationInfo(ctx context.Context, client kubernetes.Client, namespace, n
 
 		for _, container := range containers {
 			cli.Info()
-			cli.Info(container.Name)
-			cli.Info(strings.Repeat("=", len(container.Name)))
-			cli.Info()
+			cli.Info("# " + container.Name)
 
 			rows := [][]string{
 				{
@@ -102,7 +100,7 @@ func applicationInfo(ctx context.Context, client kubernetes.Client, namespace, n
 			}
 
 			cli.Info("")
-			cli.Table([]string{"PROCESS", "Value"}, rows)
+			cli.Table([]string{"Process", "Value"}, rows)
 
 			if len(container.Env) > 0 {
 				rows := make([][]string, 0)

@@ -35,11 +35,11 @@ var Command = &cli.Command{
 			cli.Fatal("This command must be run as root!")
 		}
 
-		return startCatapult(c.Context, client, namespaces, scope)
+		return StartCatapult(c.Context, client, namespaces, scope)
 	},
 }
 
-func startCatapult(ctx context.Context, client kubernetes.Client, namespaces []string, scope string) error {
+func StartCatapult(ctx context.Context, client kubernetes.Client, namespaces []string, scope string) error {
 	if scope == "" && len(namespaces) > 0 {
 		scope = namespaces[0]
 	}

@@ -31,11 +31,11 @@ var toolkitCommand = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		return runToolKit(c.Context, client, namespace, nil)
+		return RunToolKit(c.Context, client, namespace, nil)
 	},
 }
 
-func runToolKit(ctx context.Context, client kubernetes.Client, namespace string, command []string) error {
+func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string, command []string) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}

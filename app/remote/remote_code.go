@@ -75,11 +75,11 @@ var codeCommand = &cli.Command{
 
 		tunnels, _ := app.Ports(c)
 
-		return runCode(c.Context, client, stack, port, namespace, path, tunnels)
+		return RunCode(c.Context, client, stack, port, namespace, path, tunnels)
 	},
 }
 
-func runCode(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
+func RunCode(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
 	if namespace == "" {
 		namespace = client.Namespace()
 	}

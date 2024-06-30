@@ -42,11 +42,11 @@ var Command = &cli.Command{
 
 		tunnels := app.MustPorts(c)
 
-		return createTCPTunnel(c.Context, client, namespace, name, tunnels)
+		return CreateTunnel(c.Context, client, namespace, name, tunnels)
 	},
 }
 
-func createTCPTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, mapping map[int]int) error {
+func CreateTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, mapping map[int]int) error {
 	options := TunnelOptions{
 		ServiceType:  corev1.ServiceTypeClusterIP,
 		ServicePorts: mapping,
