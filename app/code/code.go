@@ -84,7 +84,7 @@ func Run(ctx context.Context, client kubernetes.Client, stack string, port int, 
 		namespace = client.Namespace()
 	}
 
-	image := "adrianliechti/loop-code"
+	image := "ghcr.io/adrianliechti/loop-code"
 
 	if stack != "" {
 		image += ":" + strings.ToLower(stack)

@@ -76,7 +76,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 				{
 					Name: "toolkit",
 
-					Image:           "adrianliechti/loop-toolkit",
+					Image:           "ghcr.io/adrianliechti/loop-toolkit",
 					ImagePullPolicy: corev1.PullAlways,
 
 					Env: []corev1.EnvVar{

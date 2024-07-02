@@ -88,7 +88,7 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 
 	container := corev1.Container{
 		Name:  "tunnel",
-		Image: "adrianliechti/loop-tunnel",
+		Image: "ghcr.io/adrianliechti/loop-tunnel",
 	}
 
 	for _, port := range options.ServicePorts {

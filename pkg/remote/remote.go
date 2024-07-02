@@ -51,7 +51,7 @@ func UpdatePod(pod *corev1.Pod, root string) error {
 	container := corev1.Container{
 		Name: "loop-tunnel",
 
-		Image:           "adrianliechti/loop-tunnel",
+		Image:           "ghcr.io/adrianliechti/loop-tunnel",
 		ImagePullPolicy: corev1.PullAlways,
 
 		SecurityContext: &corev1.SecurityContext{
