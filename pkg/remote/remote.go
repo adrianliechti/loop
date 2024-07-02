@@ -91,7 +91,6 @@ func Run(ctx context.Context, client kubernetes.Client, namespace, name string, 
 	}
 
 	options := []ssh.Option{
-		ssh.WithUsername("loop"),
 		ssh.WithCommand("mkdir -p /mnt/src && sshfs -o allow_other -p 2222 root@localhost:/ /mnt/src && /bin/sleep infinity"),
 	}
 

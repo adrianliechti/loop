@@ -182,9 +182,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 		return err
 	}
 
-	options := []ssh.Option{
-		ssh.WithUsername("loop"),
-	}
+	options := []ssh.Option{}
 
 	for s, t := range ports {
 		options = append(options, ssh.WithRemotePortForward(ssh.PortForward{LocalPort: t, RemotePort: s}))
