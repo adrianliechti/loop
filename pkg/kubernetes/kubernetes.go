@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -14,6 +16,7 @@ import (
 
 type Client interface {
 	kubernetes.Interface
+	dynamic.Interface
 
 	Config() *rest.Config
 
@@ -81,7 +84,13 @@ func NewFromBytes(kubeconfig []byte) (Client, error) {
 }
 
 func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
-	cs, err := kubernetes.NewForConfig(config)
+	k, err := kubernetes.NewForConfig(config)
+
+	if err != nil {
+		return nil, err
+	}
+
+	d, err := dynamic.NewForConfig(config)
 
 	if err != nil {
 		return nil, err
@@ -91,7 +100,8 @@ func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
 		config:    config,
 		namespace: namespace,
 
-		Interface: cs,
+		Interface: k,
+		dynamic:   d,
 	}
 
 	return client, nil
@@ -99,6 +109,7 @@ func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
 
 type client struct {
 	kubernetes.Interface
+	dynamic dynamic.Interface
 
 	config    *rest.Config
 	namespace string
@@ -124,4 +135,8 @@ func (c *client) Config() *rest.Config {
 
 func (c *client) Namespace() string {
 	return c.namespace
+}
+
+func (c *client) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	return c.dynamic.Resource(resource)
 }
