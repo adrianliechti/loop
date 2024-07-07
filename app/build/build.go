@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -173,7 +174,7 @@ func Run(ctx context.Context, client kubernetes.Client, namespace string, image 
 
 	builderPath := "/tmp/build-" + uuid.New().String()
 	builderContext := builderPath
-	builderDockerfile := filepath.Dir(filepath.Join(builderPath, dockerfile))
+	builderDockerfile := path.Dir(path.Join(builderPath, dockerfile))
 
 	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", builderPath}, false, nil, io.Discard, io.Discard); err != nil {
 		return err

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 )
 
 func (c *client) ReadFileInPod(ctx context.Context, namespace, name, container, path string, data io.Writer) error {
@@ -20,11 +20,11 @@ func (c *client) ReadFileInPod(ctx context.Context, namespace, name, container, 
 	return nil
 }
 
-func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container, path string, data io.Reader) error {
+func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container, containerPath string, data io.Reader) error {
 	mkdir := []string{
 		"mkdir",
 		"-p",
-		filepath.Dir(path),
+		path.Dir(containerPath),
 	}
 
 	if err := c.PodExec(ctx, namespace, name, container, mkdir, false, nil, os.Stdout, os.Stderr); err != nil {
@@ -34,7 +34,7 @@ func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container
 	cp := []string{
 		"cp",
 		"/dev/stdin",
-		path,
+		containerPath,
 	}
 
 	if err := c.PodExec(ctx, namespace, name, container, cp, false, data, os.Stdout, os.Stderr); err != nil {
