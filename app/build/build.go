@@ -158,7 +158,7 @@ func Run(ctx context.Context, client kubernetes.Client, namespace string, image 
 
 	name := "loop-buildkit-" + uuid.New().String()[0:7]
 
-	cli.Infof("Starting BuildKit pod (%s/%s)...", namespace, name)
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := startPod(ctx, client, namespace, name, "")
 
 	if err != nil {
@@ -166,11 +166,11 @@ func Run(ctx context.Context, client kubernetes.Client, namespace string, image 
 	}
 
 	defer func() {
-		cli.Infof("Stopping BuildKit pod (%s/%s)...", pod.Namespace, pod.Name)
+		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
-	cli.Infof("Copy Context...")
+	cli.Infof("★ copying build context...")
 
 	builderPath := "/tmp/build-" + uuid.New().String()
 	builderContext := builderPath

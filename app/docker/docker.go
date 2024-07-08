@@ -57,17 +57,17 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 	}
 
 	defer func() {
-		cli.Info("Resetting Docker context to \"" + currentContext + "\"")
+		cli.Info("★ resetting Docker context to \"" + currentContext + "\"")
 		exec.Command(docker, "context", "use", currentContext).Run()
 		exec.Command(docker, "context", "rm", loopContext).Run()
 	}()
 
 	defer func() {
-		cli.Infof("Stopping Docker pod (%s/%s)...", namespace, name)
+		cli.Infof("★ removing container (%s/%s)...", namespace, name)
 		deleteDaemon(context.Background(), client, namespace, name)
 	}()
 
-	cli.Infof("Starting Docker pod (%s/%s)...", namespace, name)
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := createDaemon(ctx, client, namespace, name)
 
 	if err != nil {
@@ -83,7 +83,7 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 	go func() {
 		<-ready
 
-		cli.Info("Setting Docker context to \"" + loopContext + "\"")
+		cli.Info("★ setting Docker context to \"" + loopContext + "\"")
 		exec.Command(docker, "context", "rm", loopContext).Run()
 		exec.Command(docker, "context", "create", loopContext, "--docker", fmt.Sprintf("host=tcp://127.0.0.1:%d", port)).Run()
 		exec.Command(docker, "context", "use", loopContext).Run()

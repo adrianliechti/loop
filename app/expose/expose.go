@@ -79,10 +79,10 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 	labels := tunnelLabels(name)
 	selector := tunnelSelector(name)
 
-	cli.Infof("Creating tunnel (%s/%s)...", namespace, name)
+	cli.Infof("★ creating tunnel (%s/%s)...", namespace, name)
 
 	defer func() {
-		cli.Infof("Deleting tunnel (%s/%s)...", namespace, name)
+		cli.Infof("★ removing tunnel (%s/%s)...", namespace, name)
 		deleteTunnel(context.Background(), client, namespace, name)
 	}()
 
@@ -160,7 +160,7 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 		<-ready
 
 		for s, t := range options.ServicePorts {
-			cli.Infof("Forwarding tcp://%s.%s:%d => tcp://localhost:%d", service.Name, namespace, t, s)
+			cli.Infof("★ forwarding tcp://%s.%s:%d => tcp://localhost:%d", service.Name, namespace, t, s)
 		}
 	}()
 

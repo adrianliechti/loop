@@ -92,7 +92,7 @@ func Run(ctx context.Context, client kubernetes.Client, stack string, port int, 
 
 	name := "loop-code-" + uuid.New().String()[0:7]
 
-	cli.Infof("Starting VSCode pod (%s/%s)...", namespace, name)
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := startPod(ctx, client, namespace, name, image)
 
 	if err != nil {
@@ -100,7 +100,7 @@ func Run(ctx context.Context, client kubernetes.Client, stack string, port int, 
 	}
 
 	defer func() {
-		cli.Infof("Stopping VSCode pod (%s/%s)...", pod.Namespace, pod.Name)
+		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 

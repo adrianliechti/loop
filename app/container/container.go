@@ -63,7 +63,7 @@ func Run(ctx context.Context, client kubernetes.Client, namespace, image string,
 
 	name := "loop-shell-" + uuid.New().String()[0:7]
 
-	cli.Infof("Starting pod (%s/%s)...", namespace, name)
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := startPod(ctx, client, namespace, name, image, stdin, tty)
 
 	if err != nil {
@@ -71,7 +71,7 @@ func Run(ctx context.Context, client kubernetes.Client, namespace, image string,
 	}
 
 	defer func() {
-		cli.Infof("Stopping pod (%s/%s)...", namespace, pod)
+		cli.Infof("★ removing container (%s/%s)...", namespace, pod)
 		stopPod(context.Background(), client, namespace, pod)
 	}()
 
