@@ -13,8 +13,11 @@ type Credentials struct {
 	Host string
 	Port string
 
-	CAData  []byte
-	APIPath string
+	URL *url.URL
+
+	CAData   []byte
+	KeyData  []byte
+	CertData []byte
 
 	Token string
 }
@@ -25,31 +28,37 @@ func (c *client) Credentials() (*Credentials, error) {
 	host := "localhost"
 	port := "443"
 
-	if h, p, err := net.SplitHostPort(host); err == nil {
+	var url *url.URL
+
+	if h, p, err := net.SplitHostPort(rc.Host); err == nil {
 		host = h
 		port = p
+
+		url, _ = url.Parse("https://" + net.JoinHostPort(h, p))
+		url = url.JoinPath(rc.APIPath)
 	}
 
 	if val, err := url.Parse(rc.Host); err == nil {
-		port = val.Port()
-
-		if port == "" {
-			port = "443"
+		if h := val.Hostname(); h != "" {
+			host = h
 		}
 
-		host = val.Hostname()
-
-		if host == "" {
-			host = "localhost"
+		if p := val.Port(); p != "" {
+			port = p
 		}
+
+		url = val
 	}
 
 	result := &Credentials{
 		Host: host,
 		Port: port,
 
-		CAData:  rc.CAData,
-		APIPath: rc.APIPath,
+		URL: url,
+
+		CAData:   rc.CAData,
+		KeyData:  rc.KeyData,
+		CertData: rc.CertData,
 	}
 
 	tc, err := rc.TransportConfig()
@@ -66,7 +75,7 @@ func (c *client) Credentials() (*Credentials, error) {
 		return nil, err
 	}
 
-	req, _ := http.NewRequest("GET", "http://localhost:8080/api", nil)
+	req, _ := http.NewRequest("GET", url.String(), nil)
 	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
