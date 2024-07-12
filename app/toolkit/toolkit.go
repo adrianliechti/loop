@@ -42,6 +42,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 	}
 
 	name := "loop-toolkit-" + uuid.New().String()[0:7]
+	container := "toolkit"
 
 	creds, err := client.Credentials()
 
@@ -74,21 +75,10 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name: "toolkit",
+					Name: container,
 
 					Image:           "ghcr.io/adrianliechti/loop-toolkit",
 					ImagePullPolicy: corev1.PullAlways,
-
-					Env: []corev1.EnvVar{
-						{
-							Name:  "KUBERNETES_SERVICE_HOST",
-							Value: creds.Host,
-						},
-						{
-							Name:  "KUBERNETES_SERVICE_PORT",
-							Value: creds.Port,
-						},
-					},
 
 					TTY:   true,
 					Stdin: true,
@@ -96,14 +86,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "config",
-							MountPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
-							SubPath:   "token",
-							ReadOnly:  true,
-						},
-						{
-							Name:      "config",
-							MountPath: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-							SubPath:   "ca.crt",
+							MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
 							ReadOnly:  true,
 						},
 					},
@@ -138,8 +121,8 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 	}
 
 	if len(command) > 0 {
-		return client.PodExec(ctx, namespace, name, "toolkit", command, true, os.Stdin, os.Stdout, os.Stderr)
+		return client.PodExec(ctx, namespace, name, container, command, true, os.Stdin, os.Stdout, os.Stderr)
 	}
 
-	return client.PodAttach(ctx, namespace, name, "toolkit", true, os.Stdin, os.Stdout, os.Stderr)
+	return client.PodAttach(ctx, namespace, name, container, true, os.Stdin, os.Stdout, os.Stderr)
 }
