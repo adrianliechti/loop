@@ -166,7 +166,7 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, name, im
 				{
 					Name: "init-workspace",
 
-					Image:           "busybox:stable",
+					Image:           "public.ecr.aws/docker/library/busybox:stable",
 					ImagePullPolicy: corev1.PullAlways,
 
 					Command: []string{
@@ -206,7 +206,7 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, name, im
 				{
 					Name: "docker",
 
-					Image:           "docker:27-dind-rootless",
+					Image:           "public.ecr.aws/docker/library/docker:27-dind-rootless",
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{

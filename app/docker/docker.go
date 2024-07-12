@@ -109,7 +109,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 				{
 					Name: "docker",
 
-					Image:           "docker:24-dind-rootless",
+					Image:           "public.ecr.aws/docker/library/docker:27-dind-rootless",
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
