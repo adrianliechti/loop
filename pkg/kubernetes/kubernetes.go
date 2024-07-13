@@ -23,6 +23,10 @@ type Client interface {
 	Namespace() string
 	Credentials() (*Credentials, error)
 
+	Apply(ctx context.Context, namespace string, reader io.Reader) error
+	ApplyFile(ctx context.Context, namespace string, path string) error
+	ApplyURL(ctx context.Context, namespace string, url string) error
+
 	PodCIDR(ctx context.Context) (string, error)
 	ServiceCIDR(ctx context.Context) (string, error)
 
