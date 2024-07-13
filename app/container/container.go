@@ -30,8 +30,8 @@ var Command = &cli.Command{
 		app.PortsFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
 		path, err := os.Getwd()
 
@@ -39,8 +39,8 @@ var Command = &cli.Command{
 			return err
 		}
 
-		image := c.String("image")
-		namespace := app.Namespace(c)
+		image := cmd.String("image")
+		namespace := app.Namespace(ctx, cmd)
 
 		if image == "" {
 			image = "debian"
@@ -50,9 +50,9 @@ var Command = &cli.Command{
 			namespace = client.Namespace()
 		}
 
-		tunnels, _ := app.Ports(c)
+		tunnels, _ := app.Ports(ctx, cmd)
 
-		return Run(c.Context, client, namespace, image, true, true, path, tunnels)
+		return Run(ctx, client, namespace, image, true, true, path, tunnels)
 	},
 }
 

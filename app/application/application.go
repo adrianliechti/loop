@@ -16,7 +16,7 @@ var Command = &cli.Command{
 
 	HideHelpCommand: true,
 
-	Subcommands: []*cli.Command{
+	Commands: []*cli.Command{
 		infoCommand,
 		logCommand,
 	},

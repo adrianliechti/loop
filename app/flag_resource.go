@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -11,8 +12,8 @@ var NameFlag = &cli.StringFlag{
 	Usage: "name",
 }
 
-func Name(c *cli.Context) string {
-	value := c.String(NameFlag.Name)
+func Name(ctx context.Context, cmd *cli.Command) string {
+	value := cmd.String(NameFlag.Name)
 
 	if value == "" {
 		return ""
@@ -21,8 +22,8 @@ func Name(c *cli.Context) string {
 	return value
 }
 
-func MustName(c *cli.Context) string {
-	value := Name(c)
+func MustName(ctx context.Context, cmd *cli.Command) string {
+	value := Name(ctx, cmd)
 
 	if value == "" {
 		cli.Fatal(errors.New("name missing"))
@@ -36,8 +37,8 @@ var ContainerFlag = &cli.StringFlag{
 	Usage: "container",
 }
 
-func Container(c *cli.Context) string {
-	value := c.String(ContainerFlag.Name)
+func Container(ctx context.Context, cmd *cli.Command) string {
+	value := cmd.String(ContainerFlag.Name)
 
 	if value == "" {
 		return ""
@@ -46,8 +47,8 @@ func Container(c *cli.Context) string {
 	return value
 }
 
-func ContainerName(c *cli.Context) string {
-	value := Container(c)
+func ContainerName(ctx context.Context, cmd *cli.Command) string {
+	value := Container(ctx, cmd)
 
 	if value == "" {
 		cli.Fatal(errors.New("container missing"))
@@ -61,8 +62,8 @@ var NamespaceFlag = &cli.StringFlag{
 	Usage: "namespace scope for this request",
 }
 
-func Namespace(c *cli.Context) string {
-	value := c.String(NamespaceFlag.Name)
+func Namespace(ctx context.Context, cmd *cli.Command) string {
+	value := cmd.String(NamespaceFlag.Name)
 
 	if value == "" {
 		return ""
@@ -71,8 +72,8 @@ func Namespace(c *cli.Context) string {
 	return value
 }
 
-func MustNamespace(c *cli.Context) string {
-	value := Namespace(c)
+func MustNamespace(ctx context.Context, cmd *cli.Command) string {
+	value := Namespace(ctx, cmd)
 
 	if value == "" {
 		cli.Fatal(errors.New("namespace missing"))
@@ -86,8 +87,8 @@ var NamespacesFlag = &cli.StringSliceFlag{
 	Usage: "namespaces for this request",
 }
 
-func Namespaces(c *cli.Context) []string {
-	value := c.StringSlice(NamespacesFlag.Name)
+func Namespaces(ctx context.Context, cmd *cli.Command) []string {
+	value := cmd.StringSlice(NamespacesFlag.Name)
 
 	if len(value) == 0 {
 		return nil
@@ -96,8 +97,8 @@ func Namespaces(c *cli.Context) []string {
 	return value
 }
 
-func MustNamespaces(c *cli.Context) []string {
-	value := Namespaces(c)
+func MustNamespaces(ctx context.Context, cmd *cli.Command) []string {
+	value := Namespaces(ctx, cmd)
 
 	if value == nil {
 		cli.Fatal(errors.New("namespaces missing"))
@@ -111,8 +112,8 @@ var ScopeFlag = &cli.StringFlag{
 	Usage: "scope",
 }
 
-func Scope(c *cli.Context) string {
-	value := c.String(ScopeFlag.Name)
+func Scope(ctx context.Context, cmd *cli.Command) string {
+	value := cmd.String(ScopeFlag.Name)
 
 	if value == "" {
 		return ""
@@ -121,8 +122,8 @@ func Scope(c *cli.Context) string {
 	return value
 }
 
-func MustScope(c *cli.Context) string {
-	value := Scope(c)
+func MustScope(ctx context.Context, cmd *cli.Command) string {
+	value := Scope(ctx, cmd)
 
 	if value == "" {
 		cli.Fatal(errors.New("scope missing"))

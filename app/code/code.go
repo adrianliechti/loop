@@ -34,8 +34,8 @@ var Command = &cli.Command{
 		app.PortsFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
 		path, err := os.Getwd()
 
@@ -50,7 +50,7 @@ var Command = &cli.Command{
 			"java",
 		}
 
-		stack := c.String("stack")
+		stack := cmd.String("stack")
 
 		if stack == "" {
 			i, _, err := cli.Select("select stack", stacks)
@@ -66,16 +66,16 @@ var Command = &cli.Command{
 			stack = ""
 		}
 
-		port := app.MustPortOrRandom(c, 8888)
-		namespace := app.Namespace(c)
+		port := app.MustPortOrRandom(ctx, cmd, 8888)
+		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {
 			namespace = client.Namespace()
 		}
 
-		tunnels, _ := app.Ports(c)
+		tunnels, _ := app.Ports(ctx, cmd)
 
-		return Run(c.Context, client, stack, port, namespace, path, tunnels)
+		return Run(ctx, client, stack, port, namespace, path, tunnels)
 	},
 }
 

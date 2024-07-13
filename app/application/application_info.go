@@ -26,24 +26,24 @@ var infoCommand = &cli.Command{
 		app.NamespaceFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		name := app.Name(c)
-		namespace := app.Namespace(c)
+		name := app.Name(ctx, cmd)
+		namespace := app.Namespace(ctx, cmd)
 
 		if name != "" && namespace == "" {
 			namespace = client.Namespace()
 		}
 
 		if name == "" {
-			app := MustApplication(c.Context, client, namespace)
+			app := MustApplication(ctx, client, namespace)
 
 			name = app.Name
 			namespace = app.Namespace
 		}
 
-		return applicationInfo(c.Context, client, namespace, name)
+		return applicationInfo(ctx, client, namespace, name)
 	},
 }
 

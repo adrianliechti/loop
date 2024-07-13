@@ -22,17 +22,17 @@ var Command = &cli.Command{
 		app.NamespaceFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		namespace := app.Namespace(c)
+		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {
 			namespace = client.Namespace()
 		}
 
-		command := c.Args().Slice()
-		return RunToolKit(c.Context, client, namespace, command)
+		command := cmd.Args().Slice()
+		return RunToolKit(ctx, client, namespace, command)
 	},
 }
 

@@ -57,27 +57,27 @@ var Command = &cli.Command{
 		},
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		path, err := ParsePath(c.Args().Get(0))
-
-		if err != nil {
-			return err
-		}
-
-		image, err := ParseImage(c.String("image"))
+		path, err := ParsePath(cmd.Args().Get(0))
 
 		if err != nil {
 			return err
 		}
 
-		image.Insecure = c.Bool("insecure")
+		image, err := ParseImage(cmd.String("image"))
 
-		image.Username = c.String("username")
-		image.Password = c.String("password")
+		if err != nil {
+			return err
+		}
 
-		return Run(c.Context, client, "", image, path, "")
+		image.Insecure = cmd.Bool("insecure")
+
+		image.Username = cmd.String("username")
+		image.Password = cmd.String("password")
+
+		return Run(ctx, client, "", image, path, "")
 	},
 }
 

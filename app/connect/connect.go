@@ -19,11 +19,11 @@ var Command = &cli.Command{
 		app.NamespacesFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		scope := app.Scope(c)
-		namespaces := app.Namespaces(c)
+		scope := app.Scope(ctx, cmd)
+		namespaces := app.Namespaces(ctx, cmd)
 
 		elevated, err := system.IsElevated()
 
@@ -35,7 +35,7 @@ var Command = &cli.Command{
 			cli.Fatal("This command must be run as root!")
 		}
 
-		return StartCatapult(c.Context, client, namespaces, scope)
+		return StartCatapult(ctx, client, namespaces, scope)
 	},
 }
 

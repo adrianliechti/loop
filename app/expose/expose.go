@@ -30,19 +30,19 @@ var Command = &cli.Command{
 		app.PortsFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		name := app.Name(c)
-		namespace := app.Namespace(c)
+		name := app.Name(ctx, cmd)
+		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {
 			namespace = client.Namespace()
 		}
 
-		tunnels := app.MustPorts(c)
+		tunnels := app.MustPorts(ctx, cmd)
 
-		return CreateTunnel(c.Context, client, namespace, name, tunnels)
+		return CreateTunnel(ctx, client, namespace, name, tunnels)
 	},
 }
 
@@ -188,7 +188,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 		options = append(options, ssh.WithRemotePortForward(ssh.PortForward{LocalPort: t, RemotePort: s}))
 	}
 
-	c := ssh.New(fmt.Sprintf("127.0.0.1:%d", localport), options...)
+	ssh := ssh.New(fmt.Sprintf("127.0.0.1:%d", localport), options...)
 
 	ready := make(chan struct{})
 
@@ -197,7 +197,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, nam
 
 		close(readyChan)
 
-		if err := c.Run(ctx); err != nil {
+		if err := ssh.Run(ctx); err != nil {
 			cli.Error(err)
 		}
 	}()

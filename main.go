@@ -35,13 +35,13 @@ func main() {
 
 	app := initApp()
 
-	if err := app.RunContext(ctx, os.Args); err != nil {
+	if err := app.Run(ctx, os.Args); err != nil {
 		cli.Fatal(err)
 	}
 }
 
-func initApp() cli.App {
-	return cli.App{
+func initApp() cli.Command {
+	return cli.Command{
 		Usage: "Loop",
 
 		Suggest: true,

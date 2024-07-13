@@ -26,17 +26,17 @@ var Command = &cli.Command{
 		app.NamespaceFlag,
 	},
 
-	Action: func(c *cli.Context) error {
-		client := app.MustClient(c)
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-		port := app.MustRandomPort(c, 2375)
-		namespace := app.Namespace(c)
+		port := app.MustRandomPort(ctx, cmd, 2375)
+		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {
 			namespace = client.Namespace()
 		}
 
-		return connectDaemon(c.Context, client, namespace, port)
+		return connectDaemon(ctx, client, namespace, port)
 	},
 }
 
@@ -52,8 +52,8 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 	loopContext := "loop"
 	currentContext := "default"
 
-	if c, err := exec.Command(docker, "context", "show").Output(); err == nil {
-		currentContext = strings.TrimRight(string(c), "\n")
+	if val, err := exec.Command(docker, "context", "show").Output(); err == nil {
+		currentContext = strings.TrimRight(string(val), "\n")
 	}
 
 	defer func() {
