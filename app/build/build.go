@@ -31,7 +31,7 @@ const (
 
 var Command = &cli.Command{
 	Name:  "build",
-	Usage: "build image with BuildKit",
+	Usage: "build image on cluster",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

@@ -17,7 +17,7 @@ import (
 
 var Command = &cli.Command{
 	Name:  "container",
-	Usage: "run cluster Container",
+	Usage: "run cluster container",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
@@ -61,7 +61,7 @@ func Run(ctx context.Context, client kubernetes.Client, namespace, image string,
 		namespace = client.Namespace()
 	}
 
-	name := "loop-shell-" + uuid.New().String()[0:7]
+	name := "loop-container-" + uuid.New().String()[0:7]
 
 	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := startPod(ctx, client, namespace, name, image, stdin, tty)

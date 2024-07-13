@@ -16,7 +16,7 @@ import (
 
 var Command = &cli.Command{
 	Name:  "toolkit",
-	Usage: "run cluster tool",
+	Usage: "run cluster toolkit",
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,

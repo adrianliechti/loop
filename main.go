@@ -56,15 +56,15 @@ func initApp() cli.Command {
 		Commands: []*cli.Command{
 			application.Command,
 
-			container.Command,
+			connect.Command,
+			expose.Command,
+
 			toolkit.Command,
 			code.Command,
+			container.Command,
 
-			connect.Command,
 			build.Command,
 			docker.Command,
-
-			expose.Command,
 		},
 	}
 }
