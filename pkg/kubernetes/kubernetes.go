@@ -12,11 +12,20 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	gateway "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+	gatewayv1 "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/typed/apis/v1"
+
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 )
 
 type Client interface {
 	kubernetes.Interface
 	dynamic.Interface
+
+	GatewayV1() gatewayv1.GatewayV1Interface
+	ApiextensionsV1() apiextensionsv1.ApiextensionsV1Interface
 
 	Config() *rest.Config
 
@@ -88,13 +97,25 @@ func NewFromBytes(kubeconfig []byte) (Client, error) {
 }
 
 func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
-	k, err := kubernetes.NewForConfig(config)
+	c, err := kubernetes.NewForConfig(config)
 
 	if err != nil {
 		return nil, err
 	}
 
-	d, err := dynamic.NewForConfig(config)
+	dc, err := dynamic.NewForConfig(config)
+
+	if err != nil {
+		return nil, err
+	}
+
+	gc, err := gateway.NewForConfig(config)
+
+	if err != nil {
+		return nil, err
+	}
+
+	ec, err := apiextensions.NewForConfig(config)
 
 	if err != nil {
 		return nil, err
@@ -104,19 +125,25 @@ func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
 		config:    config,
 		namespace: namespace,
 
-		Interface: k,
-		dynamic:   d,
+		Interface: c,
+		dynamic:   dc,
+
+		gateway:       gc,
+		apiextensions: ec,
 	}
 
 	return client, nil
 }
 
 type client struct {
+	config    *rest.Config
+	namespace string
+
 	kubernetes.Interface
 	dynamic dynamic.Interface
 
-	config    *rest.Config
-	namespace string
+	gateway       gateway.Interface
+	apiextensions apiextensions.Interface
 }
 
 func ConfigPath() string {
@@ -143,4 +170,12 @@ func (c *client) Namespace() string {
 
 func (c *client) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	return c.dynamic.Resource(resource)
+}
+
+func (c client) GatewayV1() gatewayv1.GatewayV1Interface {
+	return c.gateway.GatewayV1()
+}
+
+func (c client) ApiextensionsV1() apiextensionsv1.ApiextensionsV1Interface {
+	return c.apiextensions.ApiextensionsV1()
 }
