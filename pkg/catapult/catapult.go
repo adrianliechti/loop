@@ -63,7 +63,7 @@ func (c *Catapult) Start(ctx context.Context) error {
 		c.hosts.Flush()
 
 		for _, t := range c.tunnels {
-			system.UnaliasIP(context.Background(), t.address)
+			t.Stop()
 		}
 	}()
 
@@ -108,9 +108,7 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 
 			c.hosts.Remove(tunnel.address)
 
-			tunnel.Stop()
-
-			if err := system.UnaliasIP(ctx, tunnel.address); err != nil {
+			if err := tunnel.Stop(); err != nil {
 				result = errors.Join(result, err)
 				continue
 			}
@@ -131,11 +129,6 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 
 		if added {
 			slog.InfoContext(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
-
-			if err := system.AliasIP(ctx, tunnel.address); err != nil {
-				result = errors.Join(result, err)
-				continue
-			}
 
 			if err := tunnel.Start(ctx, nil); err != nil {
 				result = errors.Join(result, err)

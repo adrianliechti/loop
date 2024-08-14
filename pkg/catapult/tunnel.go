@@ -2,9 +2,11 @@ package catapult
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 )
 
 type tunnel struct {
@@ -42,6 +44,10 @@ func (t *tunnel) Start(ctx context.Context, readyChan chan struct{}) error {
 
 	ctx, t.cancel = context.WithCancel(ctx)
 
+	if err := system.AliasIP(ctx, t.address); err != nil {
+		return err
+	}
+
 	go func() {
 		if err := t.client.PodPortForward(ctx, t.namespace, t.name, t.address, t.ports, readyChan); err != nil {
 			slog.ErrorContext(ctx, "failed to forward", "address", t.address, "ports", t.ports, "error", err)
@@ -57,5 +63,11 @@ func (t *tunnel) Stop() error {
 		t.cancel = nil
 	}
 
-	return nil
+	var result error
+
+	if err := system.UnaliasIP(context.Background(), t.address); err != nil {
+		result = errors.Join(result, err)
+	}
+
+	return result
 }
