@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -114,6 +116,39 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 		}
 	}
 
+	for _, g := range gateways {
+		var addr string
+		var hosts []string
+
+		for _, l := range g.Spec.Listeners {
+			if l.Hostname == nil {
+				continue
+			}
+
+			hosts = append(hosts, string(*l.Hostname))
+		}
+
+		for _, a := range g.Status.Addresses {
+			if a.Type == nil || *a.Type != gatewayv1.HostnameAddressType {
+				addr = a.Value
+			}
+		}
+
+		for _, a := range g.Status.Addresses {
+			if a.Type == nil || *a.Type != gatewayv1.IPAddressType {
+				addr = a.Value
+			}
+		}
+
+		if addr == "" {
+			continue
+		}
+
+		for _, host := range hosts {
+			mappings[string(host)] = addr
+		}
+	}
+
 	for _, r := range httproutes {
 		addr := ""
 		hosts := r.Spec.Hostnames
@@ -158,14 +193,28 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 			continue
 		}
 
-		println(host, service.Namespace, service.Name)
+		pods, err := c.client.CoreV1().Pods(service.Namespace).List(ctx, metav1.ListOptions{
+			FieldSelector: "status.phase=Running",
+			LabelSelector: labels.SelectorFromSet(service.Spec.Selector).String(),
+		})
 
+		if err != nil {
+			return err
+		}
+
+		if len(pods.Items) == 0 {
+			return errors.New("no running pods found for service")
+		}
+
+		pod := pods.Items[0]
+
+		println(host, service.Namespace, service.Name, pod.Name)
 	}
 
 	return nil
 }
 
-type gateway struct {
+type gateways struct {
 }
 
 func (c *Gateway) listServices(ctx context.Context) ([]corev1.Service, error) {
