@@ -1,4 +1,4 @@
-package catapult
+package gateway
 
 import (
 	"context"
@@ -24,17 +24,7 @@ type tunnel struct {
 }
 
 func newTunnel(client kubernetes.Client, namespace, name, address string, ports map[int]int, hosts []string) *tunnel {
-	return &tunnel{
-		client: client,
-
-		name:      name,
-		namespace: namespace,
-
-		address: address,
-		ports:   ports,
-
-		hosts: hosts,
-	}
+	return &tunnel{}
 }
 
 func (t *tunnel) Start(ctx context.Context, readyChan chan struct{}) error {

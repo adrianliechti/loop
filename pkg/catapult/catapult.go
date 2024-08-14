@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"slices"
 	"time"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
@@ -17,7 +16,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -35,12 +33,10 @@ type CatapultOptions struct {
 	Namespaces []string
 
 	Selector string
-
-	IncludeIngress bool
 }
 
 func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
-	hosts, err := system.NewHostsSection("Loop")
+	hosts, err := system.NewHostsSection("Loop Catapult")
 
 	if err != nil {
 		return nil, err
@@ -163,32 +159,6 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		return tunnels, err
 	}
 
-	ingressHosts := make(map[string]string)
-
-	if c.options.IncludeIngress {
-		ingresses, err := c.listIngresses(ctx)
-
-		if err != nil {
-			return tunnels, err
-		}
-
-		for _, i := range ingresses {
-			if len(i.Status.LoadBalancer.Ingress) == 0 {
-				continue
-			}
-
-			ip := i.Status.LoadBalancer.Ingress[0].IP
-
-			for _, r := range i.Spec.Rules {
-				if r.Host == "" {
-					continue
-				}
-
-				ingressHosts[r.Host] = ip
-			}
-		}
-	}
-
 	for _, service := range services {
 		if len(service.Spec.Selector) == 0 {
 			continue
@@ -214,26 +184,6 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 
 				if service.Namespace == c.options.Scope {
 					hosts = append([]string{service.Name}, hosts...)
-				}
-
-				for host, ip := range ingressHosts {
-					var found bool
-
-					for _, i := range service.Status.LoadBalancer.Ingress {
-						if i.IP == ip {
-							found = true
-						}
-					}
-
-					if !found {
-						continue
-					}
-
-					if slices.Contains(hosts, host) {
-						continue
-					}
-
-					hosts = append(hosts, host)
 				}
 
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
@@ -303,36 +253,6 @@ func (c *Catapult) listPods(ctx context.Context) ([]corev1.Pod, error) {
 
 	for _, namespace := range c.options.Namespaces {
 		list, err := c.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, list.Items...)
-	}
-
-	return result, nil
-}
-
-func (c *Catapult) listIngresses(ctx context.Context) ([]networkingv1.Ingress, error) {
-	var result []networkingv1.Ingress
-
-	if len(c.options.Namespaces) == 0 {
-		list, err := c.client.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		return list.Items, nil
-	}
-
-	for _, namespace := range c.options.Namespaces {
-		list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: c.options.Selector,
 		})
 

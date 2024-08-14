@@ -51,8 +51,6 @@ func StartCatapult(ctx context.Context, client kubernetes.Client, namespaces []s
 	catapult, err := catapult.New(client, catapult.CatapultOptions{
 		Scope:      scope,
 		Namespaces: namespaces,
-
-		IncludeIngress: true,
 	})
 
 	if err != nil {
