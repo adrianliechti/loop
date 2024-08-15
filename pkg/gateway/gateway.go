@@ -93,8 +93,8 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 		tunnel := i
 		removed := true
 
-		for _, r := range tunnels {
-			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+		for _, t := range tunnels {
+			if tunnel.address == t.address {
 				removed = false
 				break
 			}
@@ -117,8 +117,8 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 		tunnel := i
 		added := true
 
-		for _, r := range c.tunnels {
-			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+		for _, t := range c.tunnels {
+			if tunnel.address == t.address {
 				added = false
 				break
 			}

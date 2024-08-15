@@ -92,8 +92,8 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		tunnel := i
 		removed := true
 
-		for _, r := range tunnels {
-			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+		for _, t := range tunnels {
+			if tunnel.address == t.address {
 				removed = false
 				break
 			}
@@ -116,8 +116,8 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		tunnel := i
 		added := true
 
-		for _, r := range c.tunnels {
-			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+		for _, t := range c.tunnels {
+			if tunnel.address == t.address {
 				added = false
 				break
 			}
@@ -164,13 +164,20 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 			continue
 		}
 
-		selector := labels.SelectorFromSet(service.Spec.Selector)
+		pods := selectPods(pods, labels.SelectorFromSet(service.Spec.Selector))
 
-		pods := selectPods(pods, selector)
+		if service.Spec.ClusterIP == corev1.ClusterIPNone {
+			for _, pod := range pods {
+				hosts := []string{
+					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, service.Namespace),
+				}
 
-		if service.Spec.ClusterIP != corev1.ClusterIPNone {
-			// Normal Services
+				address := mapAddress(hosts[0])
+				ports := selectPorts(service, pod.Spec.Containers...)
 
+				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
+			}
+		} else {
 			if len(pods) > 0 {
 				pod := pods[0]
 
@@ -185,18 +192,6 @@ func (c *Catapult) listTunnel(ctx context.Context) ([]*tunnel, error) {
 				if service.Namespace == c.options.Scope {
 					hosts = append([]string{service.Name}, hosts...)
 				}
-
-				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
-			}
-		} else {
-			// Headless Services
-			for _, pod := range pods {
-				hosts := []string{
-					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, service.Namespace),
-				}
-
-				address := mapAddress(hosts[0])
-				ports := selectPorts(service, pod.Spec.Containers...)
 
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 			}
