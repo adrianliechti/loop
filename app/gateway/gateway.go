@@ -7,6 +7,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/gateway"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/system"
 )
 
 var Command = &cli.Command{
@@ -23,15 +24,15 @@ var Command = &cli.Command{
 
 		namespaces := app.Namespaces(ctx, cmd)
 
-		// elevated, err := system.IsElevated()
+		elevated, err := system.IsElevated()
 
-		// if err != nil {
-		// 	return err
-		// }
+		if err != nil {
+			return err
+		}
 
-		// if !elevated {
-		// 	cli.Fatal("This command must be run as root!")
-		// }
+		if !elevated {
+			cli.Fatal("This command must be run as root!")
+		}
 
 		return StartGateway(ctx, client, namespaces)
 	},

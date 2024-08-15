@@ -64,18 +64,18 @@ func (c *Catapult) Start(ctx context.Context) error {
 	}()
 
 	for {
-		if err := ctx.Err(); err != nil {
-			break
-		}
-
 		if err := c.Refresh(ctx); err != nil {
 			slog.ErrorContext(ctx, "refresh failed", "error", err)
 		}
 
-		time.Sleep(10 * time.Second)
-	}
+		select {
+		case <-time.After(10 * time.Second):
+			continue
 
-	return nil
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 func (c *Catapult) Refresh(ctx context.Context) error {
