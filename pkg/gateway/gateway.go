@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -18,7 +19,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -26,14 +29,18 @@ type Gateway struct {
 	client  kubernetes.Client
 	options GatewayOptions
 
+	hosts *system.HostsSection
+
 	tunnels []*tunnel
-	hosts   *system.HostsSection
+
+	services   map[string]corev1.Service
+	gateways   map[string]gatewayv1.Gateway
+	httproutes map[string]gatewayv1.HTTPRoute
+	ingresses  map[string]networkingv1.Ingress
 }
 
 type GatewayOptions struct {
 	Namespaces []string
-
-	Selector string
 }
 
 func New(client kubernetes.Client, options GatewayOptions) (*Gateway, error) {
@@ -48,6 +55,13 @@ func New(client kubernetes.Client, options GatewayOptions) (*Gateway, error) {
 		options: options,
 
 		hosts: hosts,
+
+		tunnels: make([]*tunnel, 0),
+
+		services:   make(map[string]corev1.Service),
+		gateways:   make(map[string]gatewayv1.Gateway),
+		httproutes: make(map[string]gatewayv1.HTTPRoute),
+		ingresses:  make(map[string]networkingv1.Ingress),
 	}, nil
 }
 
@@ -63,6 +77,30 @@ func (c *Gateway) Start(ctx context.Context) error {
 			t.Stop()
 		}
 	}()
+
+	namespaces := c.options.Namespaces
+
+	if len(namespaces) == 0 {
+		namespaces = []string{""}
+	}
+
+	if err := c.watchServices(ctx, c.client, ""); err != nil {
+		return err
+	}
+
+	for _, namespace := range namespaces {
+		if err := c.watchGateways(ctx, c.client, namespace); err != nil {
+			return err
+		}
+
+		if err := c.watchHTTPRoutes(ctx, c.client, namespace); err != nil {
+			return err
+		}
+
+		if err := c.watchIngresses(ctx, c.client, namespace); err != nil {
+			return err
+		}
+	}
 
 	for {
 		if err := c.Refresh(ctx); err != nil {
@@ -80,13 +118,13 @@ func (c *Gateway) Start(ctx context.Context) error {
 }
 
 func (c *Gateway) Refresh(ctx context.Context) error {
+	var result error
+
 	tunnels, err := c.listTunnel(ctx)
 
 	if err != nil {
 		return err
 	}
-
-	var result error
 
 	// remove unused tunnels
 	for _, i := range c.tunnels {
@@ -148,33 +186,9 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	tunnels := make(map[string]*tunnel)
 
-	services, err := c.listServices(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	gateways, err := c.listGateways(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	httproutes, err := c.listHTTPRoutes(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	ingresses, err := c.listIngresses(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
 	mappings := make(map[string]string)
 
-	for _, i := range ingresses {
+	for _, i := range c.ingresses {
 		if len(i.Status.LoadBalancer.Ingress) == 0 {
 			continue
 		}
@@ -190,7 +204,7 @@ func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		}
 	}
 
-	for _, g := range gateways {
+	for _, g := range c.gateways {
 		var addr string
 		var hosts []string
 
@@ -223,7 +237,7 @@ func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 		}
 	}
 
-	for _, r := range httproutes {
+	for _, r := range c.httproutes {
 		addr := ""
 		hosts := r.Spec.Hostnames
 
@@ -232,7 +246,7 @@ func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 				continue
 			}
 
-			for _, g := range gateways {
+			for _, g := range c.gateways {
 				if g.Namespace != r.Namespace || g.Name != string(p.Name) {
 					continue
 				}
@@ -270,7 +284,7 @@ func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 			continue
 		}
 
-		service, ok := findService(services, addr)
+		service, ok := c.findService(addr)
 
 		if !ok {
 			continue
@@ -301,20 +315,156 @@ func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
 	return maps.Values(tunnels), nil
 }
 
-func (c *Gateway) listServices(ctx context.Context) ([]corev1.Service, error) {
-	list, err := c.client.CoreV1().Services("").List(ctx, metav1.ListOptions{
-		LabelSelector: c.options.Selector,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return list.Items, nil
+func resourceKey(obj metav1.Object) string {
+	return fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 }
 
-func findService(services []corev1.Service, addr string) (*corev1.Service, bool) {
-	for _, s := range services {
+func (c *Gateway) watchServices(ctx context.Context, client kubernetes.Client, namespace string) error {
+	list, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	for _, s := range list.Items {
+		c.services[resourceKey(&s)] = s
+	}
+
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			s := obj.(*corev1.Service)
+			c.services[resourceKey(s)] = *s
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			s := newObj.(*corev1.Service)
+			c.services[resourceKey(s)] = *s
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			s := obj.(*corev1.Service)
+			delete(c.services, resourceKey(s))
+		},
+	}
+
+	watcher := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "services", namespace, fields.Everything())
+
+	_, controller := cache.NewInformer(watcher, &corev1.Service{}, 0, handlers)
+	go controller.Run(ctx.Done())
+
+	return nil
+}
+
+func (c *Gateway) watchGateways(ctx context.Context, client kubernetes.Client, namespace string) error {
+	list, err := c.client.GatewayV1().Gateways(namespace).List(ctx, metav1.ListOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	for _, g := range list.Items {
+		c.gateways[resourceKey(&g)] = g
+	}
+
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			g := obj.(*gatewayv1.Gateway)
+			c.gateways[resourceKey(g)] = *g
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			g := newObj.(*gatewayv1.Gateway)
+			c.gateways[resourceKey(g)] = *g
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			g := obj.(*gatewayv1.Gateway)
+			delete(c.gateways, resourceKey(g))
+		},
+	}
+
+	watcher := cache.NewListWatchFromClient(client.GatewayV1().RESTClient(), "gateways", namespace, fields.Everything())
+
+	_, controller := cache.NewInformer(watcher, &gatewayv1.Gateway{}, 0, handlers)
+	go controller.Run(ctx.Done())
+
+	return nil
+}
+
+func (c *Gateway) watchHTTPRoutes(ctx context.Context, client kubernetes.Client, namespace string) error {
+	list, err := c.client.GatewayV1().HTTPRoutes(namespace).List(ctx, metav1.ListOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	for _, r := range list.Items {
+		c.httproutes[resourceKey(&r)] = r
+	}
+
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			r := obj.(*gatewayv1.HTTPRoute)
+			c.httproutes[resourceKey(r)] = *r
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			r := newObj.(*gatewayv1.HTTPRoute)
+			c.httproutes[resourceKey(r)] = *r
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			r := obj.(*gatewayv1.HTTPRoute)
+			delete(c.httproutes, resourceKey(r))
+		},
+	}
+
+	watcher := cache.NewListWatchFromClient(client.GatewayV1().RESTClient(), "httproutes", namespace, fields.Everything())
+
+	_, controller := cache.NewInformer(watcher, &gatewayv1.HTTPRoute{}, 0, handlers)
+	go controller.Run(ctx.Done())
+
+	return nil
+}
+
+func (c *Gateway) watchIngresses(ctx context.Context, client kubernetes.Client, namespace string) error {
+	list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	for _, i := range list.Items {
+		c.ingresses[resourceKey(&i)] = i
+	}
+
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			i := obj.(*networkingv1.Ingress)
+			c.ingresses[resourceKey(i)] = *i
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			i := newObj.(*networkingv1.Ingress)
+			c.ingresses[resourceKey(i)] = *i
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			i := obj.(*networkingv1.Ingress)
+			delete(c.ingresses, resourceKey(i))
+		},
+	}
+
+	watcher := cache.NewListWatchFromClient(client.NetworkingV1().RESTClient(), "ingresses", namespace, fields.Everything())
+
+	_, controller := cache.NewInformer(watcher, &networkingv1.Ingress{}, 0, handlers)
+	go controller.Run(ctx.Done())
+
+	return nil
+}
+
+func (c *Gateway) findService(addr string) (*corev1.Service, bool) {
+	for _, s := range c.services {
 		service := s
 
 		for _, ip := range s.Spec.ClusterIPs {
@@ -331,116 +481,6 @@ func findService(services []corev1.Service, addr string) (*corev1.Service, bool)
 	}
 
 	return nil, false
-}
-
-func (c *Gateway) listIngresses(ctx context.Context) ([]networkingv1.Ingress, error) {
-	if len(c.options.Namespaces) == 0 {
-		list, err := c.client.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			if kubernetes.IsNotFound(err) {
-				return []networkingv1.Ingress{}, nil
-			}
-
-			return nil, err
-		}
-
-		return list.Items, nil
-	}
-
-	var result []networkingv1.Ingress
-
-	for _, namespace := range c.options.Namespaces {
-		list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			continue
-		}
-
-		result = append(result, list.Items...)
-	}
-
-	return result, nil
-}
-
-func (c *Gateway) listGateways(ctx context.Context) ([]gatewayv1.Gateway, error) {
-	if len(c.options.Namespaces) == 0 {
-		list, err := c.client.GatewayV1().Gateways("").List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			if kubernetes.IsNotFound(err) {
-				return []gatewayv1.Gateway{}, nil
-			}
-
-			return nil, err
-		}
-
-		return list.Items, nil
-	}
-
-	var result []gatewayv1.Gateway
-
-	for _, namespace := range c.options.Namespaces {
-		list, err := c.client.GatewayV1().Gateways(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			if kubernetes.IsNotFound(err) {
-				return []gatewayv1.Gateway{}, nil
-			}
-
-			return nil, err
-		}
-
-		result = append(result, list.Items...)
-	}
-
-	return result, nil
-}
-
-func (c *Gateway) listHTTPRoutes(ctx context.Context) ([]gatewayv1.HTTPRoute, error) {
-	if len(c.options.Namespaces) == 0 {
-		list, err := c.client.GatewayV1().HTTPRoutes("").List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			if kubernetes.IsNotFound(err) {
-				return []gatewayv1.HTTPRoute{}, nil
-			}
-
-			return nil, err
-		}
-
-		return list.Items, nil
-	}
-
-	var result []gatewayv1.HTTPRoute
-
-	for _, namespace := range c.options.Namespaces {
-		list, err := c.client.GatewayV1().HTTPRoutes(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: c.options.Selector,
-		})
-
-		if err != nil {
-			if kubernetes.IsNotFound(err) {
-				return []gatewayv1.HTTPRoute{}, nil
-			}
-
-			return nil, err
-		}
-
-		result = append(result, list.Items...)
-	}
-
-	return result, nil
 }
 
 func selectPorts(service corev1.Service, containers ...corev1.Container) map[int]int {
