@@ -2,9 +2,15 @@ package gateway
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
+	"io"
 	"log/slog"
+	"net"
+	"strings"
 	"time"
+
+	"golang.org/x/exp/maps"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
@@ -74,28 +80,96 @@ func (c *Gateway) Start(ctx context.Context) error {
 }
 
 func (c *Gateway) Refresh(ctx context.Context) error {
-	services, err := c.listServices(ctx)
+	tunnels, err := c.listTunnel(ctx)
 
 	if err != nil {
 		return err
+	}
+
+	var result error
+
+	// remove unused tunnels
+	for _, i := range c.tunnels {
+		tunnel := i
+		removed := true
+
+		for _, r := range tunnels {
+			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+				removed = false
+				break
+			}
+		}
+
+		if removed {
+			slog.InfoContext(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
+
+			c.hosts.Remove(tunnel.address)
+
+			if err := tunnel.Stop(); err != nil {
+				result = errors.Join(result, err)
+				continue
+			}
+		}
+	}
+
+	// add new tunnels
+	for _, i := range tunnels {
+		tunnel := i
+		added := true
+
+		for _, r := range c.tunnels {
+			if tunnel.namespace == r.namespace && tunnel.name == r.name {
+				added = false
+				break
+			}
+		}
+
+		if added {
+			slog.InfoContext(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
+
+			if err := tunnel.Start(ctx, nil); err != nil {
+				result = errors.Join(result, err)
+				continue
+			}
+
+			c.hosts.Add(tunnel.address, tunnel.hosts...)
+		}
+	}
+
+	c.tunnels = tunnels
+
+	if err := c.hosts.Flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Gateway) listTunnel(ctx context.Context) ([]*tunnel, error) {
+	tunnels := make(map[string]*tunnel)
+
+	services, err := c.listServices(ctx)
+
+	if err != nil {
+		return nil, err
 	}
 
 	gateways, err := c.listGateways(ctx)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	httproutes, err := c.listHTTPRoutes(ctx)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ingresses, err := c.listIngresses(ctx)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	mappings := make(map[string]string)
@@ -187,6 +261,15 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 	}
 
 	for host, addr := range mappings {
+		if strings.Contains(host, "*") {
+			continue
+		}
+
+		if tunnel, ok := tunnels[addr]; ok {
+			tunnel.hosts = append(tunnel.hosts, host)
+			continue
+		}
+
 		service, ok := findService(services, addr)
 
 		if !ok {
@@ -199,22 +282,23 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 		})
 
 		if err != nil {
-			return err
+			continue
 		}
 
 		if len(pods.Items) == 0 {
-			return errors.New("no running pods found for service")
+			continue
 		}
 
 		pod := pods.Items[0]
 
-		println(host, service.Namespace, service.Name, pod.Name)
+		address := mapAddress(service.Spec.ClusterIP)
+		ports := selectPorts(*service, pod.Spec.Containers...)
+
+		tunnel := newTunnel(c.client, pod.Namespace, pod.Name, address, ports, []string{host})
+		tunnels[addr] = tunnel
 	}
 
-	return nil
-}
-
-type gateways struct {
+	return maps.Values(tunnels), nil
 }
 
 func (c *Gateway) listServices(ctx context.Context) ([]corev1.Service, error) {
@@ -357,4 +441,49 @@ func (c *Gateway) listHTTPRoutes(ctx context.Context) ([]gatewayv1.HTTPRoute, er
 	}
 
 	return result, nil
+}
+
+func selectPorts(service corev1.Service, containers ...corev1.Container) map[int]int {
+	ports := make(map[int]int)
+
+	for _, port := range service.Spec.Ports {
+		servicePort := int(port.Port)
+		containerPort := 0
+
+		if port.Protocol != "" && port.Protocol != corev1.ProtocolTCP {
+			continue
+		}
+
+		for _, c := range containers {
+			for _, p := range c.Ports {
+				if p.Name != "" && p.Name == port.TargetPort.String() {
+					containerPort = int(p.ContainerPort)
+				}
+			}
+		}
+
+		if port.TargetPort.IntVal > 0 {
+			containerPort = int(port.TargetPort.IntVal)
+		}
+
+		if servicePort > 0 && containerPort > 0 {
+			ports[servicePort] = containerPort
+		}
+	}
+
+	return ports
+}
+
+func mapAddress(address string) string {
+	h := md5.New()
+	io.WriteString(h, address)
+
+	addr := h.Sum(nil)
+
+	addr = addr[:4]
+	addr[0] = 127
+	addr[1] = 245
+
+	ip := net.IP(addr)
+	return ip.String()
 }

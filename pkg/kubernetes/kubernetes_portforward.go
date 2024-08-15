@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/transport/spdy"
 )
 
-func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports1 map[int]int, readyChan chan struct{}) error {
+func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
 	service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 
 	if err != nil {
@@ -54,9 +54,9 @@ func (c *client) ServicePortForward(ctx context.Context, namespace, name, addres
 		}
 	}
 
-	podMappings := make(map[int]int)
+	mappings := make(map[int]int)
 
-	for k, v := range ports1 {
+	for k, v := range ports {
 		localPort := k
 		targetPort := v
 
@@ -64,10 +64,10 @@ func (c *client) ServicePortForward(ctx context.Context, namespace, name, addres
 			targetPort = val
 		}
 
-		podMappings[localPort] = targetPort
+		mappings[localPort] = targetPort
 	}
 
-	return c.PodPortForward(ctx, pod.Namespace, pod.Name, address, podMappings, readyChan)
+	return c.PodPortForward(ctx, pod.Namespace, pod.Name, address, mappings, readyChan)
 }
 
 func (c *client) PodPortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
