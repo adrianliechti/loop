@@ -22,10 +22,7 @@ changelog:
   sort: asc
 
 brews:
-  - dependencies:
-      - name: kubernetes-cli
-
-    repository:
+  - repository:
       owner: adrianliechti
       name: homebrew-tap
 

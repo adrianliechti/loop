@@ -16,5 +16,5 @@ brew install adrianliechti/tap/loop
 
 ```shell
 scoop bucket add adrianliechti https://github.com/adrianliechti/scoop-bucket
-scoop install kubectl adrianliechti/loop
+scoop install adrianliechti/loop
 ```
