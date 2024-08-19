@@ -1,4 +1,4 @@
-package catapult
+package gateway
 
 import (
 	"context"
@@ -31,8 +31,8 @@ func newTunnel(client kubernetes.Client, namespace, name, address string, ports 
 		namespace: namespace,
 
 		address: address,
-		ports:   ports,
 
+		ports: ports,
 		hosts: hosts,
 	}
 }

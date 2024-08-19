@@ -1,18 +1,18 @@
-package connect
+package gateway
 
 import (
 	"context"
 
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/catapult"
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/gateway"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
 )
 
 var Command = &cli.Command{
-	Name:  "connect",
-	Usage: "connect Kubernetes network",
+	Name:  "gateway",
+	Usage: "connect ingresses/gateways",
 
 	Flags: []cli.Flag{
 		app.ScopeFlag,
@@ -22,7 +22,6 @@ var Command = &cli.Command{
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 
-		scope := app.Scope(ctx, cmd)
 		namespaces := app.Namespaces(ctx, cmd)
 
 		elevated, err := system.IsElevated()
@@ -35,21 +34,12 @@ var Command = &cli.Command{
 			cli.Fatal("This command must be run as root!")
 		}
 
-		return StartCatapult(ctx, client, namespaces, scope)
+		return StartGateway(ctx, client, namespaces)
 	},
 }
 
-func StartCatapult(ctx context.Context, client kubernetes.Client, namespaces []string, scope string) error {
-	if scope == "" && len(namespaces) > 0 {
-		scope = namespaces[0]
-	}
-
-	if scope == "" {
-		scope = client.Namespace()
-	}
-
-	catapult, err := catapult.New(client, catapult.CatapultOptions{
-		Scope:      scope,
+func StartGateway(ctx context.Context, client kubernetes.Client, namespaces []string) error {
+	gateway, err := gateway.New(client, gateway.GatewayOptions{
 		Namespaces: namespaces,
 	})
 
@@ -57,5 +47,5 @@ func StartCatapult(ctx context.Context, client kubernetes.Client, namespaces []s
 		return err
 	}
 
-	return catapult.Start(ctx)
+	return gateway.Start(ctx)
 }
