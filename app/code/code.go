@@ -45,9 +45,10 @@ var Command = &cli.Command{
 
 		stacks := []string{
 			"default",
-			"dotnet",
 			"golang",
+			"python",
 			"java",
+			"dotnet",
 		}
 
 		stack := cmd.String("stack")
