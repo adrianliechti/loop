@@ -2,6 +2,7 @@ package connect
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/catapult"
@@ -51,6 +52,16 @@ func StartCatapult(ctx context.Context, client kubernetes.Client, namespaces []s
 	catapult, err := catapult.New(client, catapult.CatapultOptions{
 		Scope:      scope,
 		Namespaces: namespaces,
+
+		Logger: slog.Default(),
+
+		AddFunc: func(address string, hosts []string, ports []int) {
+			slog.InfoContext(ctx, "adding tunnel", "address", address, "hosts", hosts, "ports", ports)
+		},
+
+		DeleteFunc: func(address string, hosts []string, ports []int) {
+			slog.InfoContext(ctx, "removing tunnel", "address", address, "hosts", hosts, "ports", ports)
+		},
 	})
 
 	if err != nil {

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
@@ -41,6 +42,16 @@ var Command = &cli.Command{
 func StartGateway(ctx context.Context, client kubernetes.Client, namespaces []string) error {
 	gateway, err := gateway.New(client, gateway.GatewayOptions{
 		Namespaces: namespaces,
+
+		Logger: slog.Default(),
+
+		AddFunc: func(address string, hosts []string, ports []int) {
+			slog.InfoContext(ctx, "adding tunnel", "address", address, "hosts", hosts, "ports", ports)
+		},
+
+		DeleteFunc: func(address string, hosts []string, ports []int) {
+			slog.InfoContext(ctx, "removing tunnel", "address", address, "hosts", hosts, "ports", ports)
+		},
 	})
 
 	if err != nil {

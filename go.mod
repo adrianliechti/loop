@@ -1,8 +1,6 @@
 module github.com/adrianliechti/loop
 
-go 1.22.0
-
-toolchain go1.22.4
+go 1.23
 
 require (
 	github.com/charmbracelet/huh v0.5.2

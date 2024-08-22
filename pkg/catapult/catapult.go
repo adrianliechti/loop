@@ -37,6 +37,11 @@ type Catapult struct {
 type CatapultOptions struct {
 	Scope      string
 	Namespaces []string
+
+	Logger *slog.Logger
+
+	AddFunc    func(address string, hosts []string, ports []int)
+	DeleteFunc func(address string, hosts []string, ports []int)
 }
 
 func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
@@ -88,9 +93,15 @@ func (c *Catapult) Start(ctx context.Context) error {
 		}
 	}
 
+	if err := c.Refresh(ctx); err != nil {
+		return err
+	}
+
 	for {
 		if err := c.Refresh(ctx); err != nil {
-			slog.ErrorContext(ctx, "refresh failed", "error", err)
+			if c.options.Logger != nil {
+				c.options.Logger.ErrorContext(ctx, "refresh failed", "error", err)
+			}
 		}
 
 		select {
@@ -121,13 +132,15 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if removed {
-			slog.InfoContext(ctx, "removing tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
-
 			c.hosts.Remove(tunnel.address)
 
 			if err := tunnel.Stop(); err != nil {
 				result = errors.Join(result, err)
 				continue
+			}
+
+			if c.options.DeleteFunc != nil {
+				c.options.DeleteFunc(tunnel.address, tunnel.hosts, maps.Keys(tunnel.ports))
 			}
 		}
 	}
@@ -145,14 +158,16 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 		}
 
 		if added {
-			slog.InfoContext(ctx, "adding tunnel", "namespace", tunnel.namespace, "hosts", tunnel.hosts, "ports", maps.Keys(tunnel.ports))
-
 			if err := tunnel.Start(ctx, nil); err != nil {
 				result = errors.Join(result, err)
 				continue
 			}
 
 			c.hosts.Add(tunnel.address, tunnel.hosts...)
+
+			if c.options.AddFunc != nil {
+				c.options.AddFunc(tunnel.address, tunnel.hosts, maps.Keys(tunnel.ports))
+			}
 		}
 	}
 
