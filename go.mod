@@ -13,16 +13,16 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pkg/sftp v1.13.7
-	github.com/urfave/cli/v3 v3.0.0-alpha9.3
+	github.com/urfave/cli/v3 v3.0.0-alpha9.4
 	golang.org/x/crypto v0.29.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
 	golang.org/x/sync v0.9.0
 	golang.org/x/sys v0.27.0
-	k8s.io/api v0.31.2
-	k8s.io/apiextensions-apiserver v0.31.2
-	k8s.io/apimachinery v0.31.2
-	k8s.io/client-go v0.31.2
-	k8s.io/kubectl v0.31.2
+	k8s.io/api v0.31.3
+	k8s.io/apiextensions-apiserver v0.31.3
+	k8s.io/apimachinery v0.31.3
+	k8s.io/client-go v0.31.3
+	k8s.io/kubectl v0.31.3
 	sigs.k8s.io/gateway-api v1.2.0
 )
 
@@ -97,7 +97,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/cli-runtime v0.31.2 // indirect
+	k8s.io/cli-runtime v0.31.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240423202451-8948a665c108 // indirect
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
