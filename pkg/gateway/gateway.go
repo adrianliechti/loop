@@ -374,6 +374,10 @@ func (c *Gateway) watchGateways(ctx context.Context, client kubernetes.Client, n
 	list, err := c.client.GatewayV1().Gateways(namespace).List(ctx, metav1.ListOptions{})
 
 	if err != nil {
+		if kubernetes.IsNotFound(err) {
+			return nil
+		}
+
 		return err
 	}
 
@@ -410,6 +414,10 @@ func (c *Gateway) watchHTTPRoutes(ctx context.Context, client kubernetes.Client,
 	list, err := c.client.GatewayV1().HTTPRoutes(namespace).List(ctx, metav1.ListOptions{})
 
 	if err != nil {
+		if kubernetes.IsNotFound(err) {
+			return nil
+		}
+
 		return err
 	}
 
@@ -446,6 +454,10 @@ func (c *Gateway) watchIngresses(ctx context.Context, client kubernetes.Client, 
 	list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
 
 	if err != nil {
+		if kubernetes.IsNotFound(err) {
+			return nil
+		}
+
 		return err
 	}
 

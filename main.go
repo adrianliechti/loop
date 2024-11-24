@@ -57,7 +57,6 @@ func initApp() cli.Command {
 			application.Command,
 
 			connect.Command,
-			//gateway.Command,
 			expose.Command,
 
 			toolkit.Command,
