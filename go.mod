@@ -13,7 +13,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pkg/sftp v1.13.7
-	github.com/urfave/cli/v3 v3.0.0-alpha9.4
+	github.com/urfave/cli/v3 v3.0.0-alpha9.7
 	golang.org/x/crypto v0.29.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
 	golang.org/x/sync v0.9.0
@@ -23,7 +23,7 @@ require (
 	k8s.io/apimachinery v0.31.3
 	k8s.io/client-go v0.31.3
 	k8s.io/kubectl v0.31.3
-	sigs.k8s.io/gateway-api v1.2.0
+	sigs.k8s.io/gateway-api v1.2.1
 )
 
 require (
