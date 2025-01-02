@@ -10,14 +10,14 @@ require (
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/uuid v1.6.0
-	github.com/lmittmann/tint v1.0.5
-	github.com/moby/moby v27.4.0+incompatible
+	github.com/lmittmann/tint v1.0.6
+	github.com/moby/moby v27.4.1+incompatible
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pkg/sftp v1.13.7
 	github.com/urfave/cli/v3 v3.0.0-alpha9.7
 	golang.org/x/crypto v0.31.0
-	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.28.0
 	k8s.io/api v0.32.0
