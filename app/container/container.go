@@ -42,14 +42,6 @@ var Command = &cli.Command{
 		image := cmd.String("image")
 		namespace := app.Namespace(ctx, cmd)
 
-		if image == "" {
-			image = "debian"
-		}
-
-		if namespace == "" {
-			namespace = client.Namespace()
-		}
-
 		tunnels, _ := app.Ports(ctx, cmd)
 
 		return Run(ctx, client, namespace, image, true, true, path, tunnels)
@@ -57,6 +49,10 @@ var Command = &cli.Command{
 }
 
 func Run(ctx context.Context, client kubernetes.Client, namespace, image string, stdin, tty bool, path string, ports map[int]int) error {
+	if image == "" {
+		image = "debian"
+	}
+
 	if namespace == "" {
 		namespace = client.Namespace()
 	}
