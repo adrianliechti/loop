@@ -17,6 +17,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/to"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/uuid"
 	"github.com/moby/moby/pkg/archive"
@@ -204,11 +205,11 @@ func Run(ctx context.Context, client kubernetes.Client, namespace string, image 
 
 		data, _ := json.Marshal(config)
 
-		if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", "/root/.docker"}, false, nil, io.Discard, io.Discard); err != nil {
+		if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", "/home/user/.docker"}, false, nil, io.Discard, io.Discard); err != nil {
 			return err
 		}
 
-		if err := client.PodExec(ctx, namespace, name, container, []string{"cp", "/dev/stdin", "/root/.docker/config.json"}, false, bytes.NewReader(data), io.Discard, io.Discard); err != nil {
+		if err := client.PodExec(ctx, namespace, name, container, []string{"cp", "/dev/stdin", "/home/user/.docker/config.json"}, false, bytes.NewReader(data), io.Discard, io.Discard); err != nil {
 			return err
 		}
 	}
@@ -244,7 +245,13 @@ func Run(ctx context.Context, client kubernetes.Client, namespace string, image 
 
 func startPod(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
 	if image == "" {
-		image = "moby/buildkit"
+		image = "moby/buildkit:rootless"
+	}
+
+	version, err := client.Version(ctx)
+
+	if err != nil {
+		return nil, err
 	}
 
 	probe := &corev1.Probe{
@@ -275,17 +282,59 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, name, im
 					Image:           image,
 					ImagePullPolicy: corev1.PullAlways,
 
+					Args: []string{
+						"--oci-worker-no-process-sandbox",
+					},
+
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: to.Ptr(true),
+
+						AppArmorProfile: &corev1.AppArmorProfile{
+							Type: corev1.AppArmorProfileTypeUnconfined,
+						},
+
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeUnconfined,
+						},
+
+						RunAsUser:  to.Ptr(int64(1000)),
+						RunAsGroup: to.Ptr(int64(1000)),
 					},
 
 					ReadinessProbe: probe,
 					LivenessProbe:  probe,
+
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "data",
+							MountPath: "/home/user/.local/share/buildkit",
+						},
+					},
 				},
 			},
 
 			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+
+			Volumes: []corev1.Volume{
+				{
+					Name: "data",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
 		},
+	}
+
+	c, _ := semver.NewConstraint("< 1.30")
+
+	if c.Check(version) {
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
+		}
+
+		pod.Spec.Containers[0].SecurityContext.AppArmorProfile = nil
+		pod.Annotations["container.apparmor.security.beta.kubernetes.io/buildkitd"] = "unconfined"
 	}
 
 	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {

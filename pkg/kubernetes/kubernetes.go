@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Masterminds/semver/v3"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -31,6 +33,8 @@ type Client interface {
 
 	Namespace() string
 	Credentials() (*Credentials, error)
+
+	Version(ctx context.Context) (*semver.Version, error)
 
 	Apply(ctx context.Context, namespace string, reader io.Reader) error
 	ApplyFile(ctx context.Context, namespace string, path string) error

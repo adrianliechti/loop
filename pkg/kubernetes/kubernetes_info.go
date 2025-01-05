@@ -6,9 +6,21 @@ import (
 	"net"
 	"regexp"
 
+	"github.com/Masterminds/semver/v3"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func (c *client) Version(ctx context.Context) (*semver.Version, error) {
+	version, err := c.Discovery().ServerVersion()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return semver.NewVersion(version.GitVersion)
+}
 
 func (c *client) PodCIDR(ctx context.Context) (string, error) {
 	nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
