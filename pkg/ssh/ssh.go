@@ -196,24 +196,15 @@ func tunnelConnection(c net.Conn, d dialer, addr string) error {
 
 	defer conn.Close()
 
-	return tunnel(conn, c)
+	return copy(conn, c)
 }
 
-func tunnel(local, remote net.Conn) error {
+func copy(local, remote net.Conn) error {
 	defer local.Close()
 	defer remote.Close()
 
-	result := make(chan error, 2)
+	go io.Copy(local, remote)
+	_, err := io.Copy(remote, local)
 
-	go func() {
-		_, err := io.Copy(local, remote)
-		result <- err
-	}()
-
-	go func() {
-		_, err := io.Copy(remote, local)
-		result <- err
-	}()
-
-	return <-result
+	return err
 }
