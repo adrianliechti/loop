@@ -287,8 +287,6 @@ func startPod(ctx context.Context, client kubernetes.Client, namespace, name, im
 					},
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.Ptr(true),
-
 						AppArmorProfile: &corev1.AppArmorProfile{
 							Type: corev1.AppArmorProfileTypeUnconfined,
 						},
