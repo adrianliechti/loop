@@ -1,0 +1,358 @@
+package build
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/docker"
+	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/to"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/uuid"
+	"github.com/moby/moby/pkg/archive"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	container = "buildkitd"
+)
+
+type Image struct {
+	Name string
+	Tag  string
+
+	Insecure bool
+	Registry string
+
+	Username string
+	Password string
+}
+
+type RunOptions struct {
+	Name      string
+	Namespace string
+
+	// Rootless BuildKit image overwrite
+	Image string
+
+	Stdout io.Writer
+	Stderr io.Writer
+
+	OnPod     func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnContext func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, path string) error
+}
+
+func (i *Image) String() string {
+	s := i.Name
+
+	if i.Registry != "" {
+		s = i.Registry + "/" + s
+	}
+
+	if i.Tag != "" {
+		s = s + ":" + i.Tag
+	}
+
+	s = strings.TrimPrefix(s, "index.docker.io/")
+
+	return s
+}
+
+func ParsePath(path string) (string, error) {
+	if path == "" || path == "." {
+		return os.Getwd()
+	}
+
+	return filepath.Abs(path)
+}
+
+func ParseImage(image string) (Image, error) {
+	tag, err := name.NewTag(image)
+
+	if err != nil {
+		return Image{}, err
+	}
+
+	return Image{
+		Name: tag.RepositoryStr(),
+		Tag:  tag.TagStr(),
+
+		Registry: tag.RegistryStr(),
+	}, nil
+}
+
+func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file string, options *RunOptions) error {
+	if options == nil {
+		options = new(RunOptions)
+	}
+
+	name := options.Name
+
+	if name == "" {
+		name = "loop-buildkit-" + uuid.NewString()[0:7]
+	}
+
+	namespace := options.Namespace
+
+	if namespace == "" {
+		namespace = client.Namespace()
+	}
+
+	if options.Stdout == nil {
+		options.Stdout = os.Stdout
+	}
+
+	if options.Stderr == nil {
+		options.Stderr = os.Stderr
+	}
+
+	if dir == "" || dir == "." {
+		wd, err := os.Getwd()
+
+		if err != nil {
+			return err
+		}
+
+		dir = wd
+	}
+
+	if file == "" {
+		file = "Dockerfile"
+	}
+
+	f, err := archive.TarWithOptions(dir, &archive.TarOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	pod := templatePod(ctx, client, namespace, name, options.Image)
+
+	if options.OnPod != nil {
+		if err := options.OnPod(ctx, client, pod); err != nil {
+			return err
+		}
+	}
+
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
+
+	if err := startPod(ctx, client, pod); err != nil {
+		return err
+	}
+
+	defer func() {
+		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
+
+		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+	}()
+
+	cli.Infof("★ copying build context...")
+
+	builderPath := "/data/build-" + uuid.NewString()[0:7]
+	builderContext := builderPath
+	builderDockerfile := path.Dir(path.Join(builderPath, file))
+
+	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", builderPath}, false, nil, options.Stdout, options.Stderr); err != nil {
+		return err
+	}
+
+	if err := client.PodExec(ctx, namespace, name, container, []string{"tar", "xf", "-", "-C", builderPath}, false, f, options.Stdout, options.Stderr); err != nil {
+		return err
+	}
+
+	if options.OnContext != nil {
+		if err := options.OnContext(ctx, client, pod, builderPath); err != nil {
+			return err
+		}
+	}
+
+	if image.Username != "" && image.Password != "" {
+		registry := image.Registry
+
+		if registry == "index.docker.io" || registry == "" {
+			registry = "https://index.docker.io/v1/"
+		}
+
+		config := docker.ConfigFile{
+			AuthConfigs: map[string]docker.AuthConfig{
+				registry: {
+					Username: image.Username,
+					Password: image.Password,
+
+					Auth: base64.StdEncoding.EncodeToString([]byte(image.Username + ":" + image.Password)),
+				},
+			},
+		}
+
+		data, _ := json.Marshal(config)
+
+		if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", "/home/user/.docker"}, false, nil, options.Stdout, options.Stderr); err != nil {
+			return err
+		}
+
+		if err := client.PodExec(ctx, namespace, name, container, []string{"cp", "/dev/stdin", "/home/user/.docker/config.json"}, false, bytes.NewReader(data), options.Stdout, options.Stderr); err != nil {
+			return err
+		}
+	}
+
+	output := []string{
+		"type=image",
+		"push=true",
+		"name=" + image.String(),
+	}
+
+	if image.Insecure {
+		output = append(output, "registry.insecure=true")
+	}
+
+	build := []string{
+		"buildctl",
+		"build",
+
+		"--frontend", "dockerfile.v0",
+
+		"--local", "context=" + builderContext,
+		"--local", "dockerfile=" + builderDockerfile,
+
+		"--output", strings.Join(output, ","),
+	}
+
+	if err := client.PodExec(ctx, namespace, name, container, build, false, f, options.Stdout, options.Stderr); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func templatePod(ctx context.Context, client kubernetes.Client, namespace, name, image string) *corev1.Pod {
+	if image == "" {
+		image = "moby/buildkit:rootless"
+	}
+
+	probe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"buildctl",
+					"debug",
+					"workers",
+				},
+			},
+		},
+
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       10,
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: container,
+
+					Image:           image,
+					ImagePullPolicy: corev1.PullAlways,
+
+					Args: []string{
+						"--oci-worker-no-process-sandbox",
+					},
+
+					SecurityContext: &corev1.SecurityContext{
+						AppArmorProfile: &corev1.AppArmorProfile{
+							Type: corev1.AppArmorProfileTypeUnconfined,
+						},
+
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeUnconfined,
+						},
+
+						RunAsUser:  to.Ptr(int64(1000)),
+						RunAsGroup: to.Ptr(int64(1000)),
+					},
+
+					ReadinessProbe: probe,
+					LivenessProbe:  probe,
+
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "data",
+							MountPath: "/data",
+						},
+						{
+							Name:      "buildkit",
+							MountPath: "/home/user/.local/share/buildkit",
+						},
+					},
+				},
+			},
+
+			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+
+			Volumes: []corev1.Volume{
+				{
+					Name: "data",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "buildkit",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+		},
+	}
+
+	if version, err := client.Version(ctx); err == nil {
+		c, _ := semver.NewConstraint("< 1.30")
+		if c.Check(version) {
+			if pod.Annotations == nil {
+				pod.Annotations = map[string]string{}
+			}
+
+			pod.Spec.Containers[0].SecurityContext.AppArmorProfile = nil
+			pod.Annotations["container.apparmor.security.beta.kubernetes.io/buildkitd"] = "unconfined"
+		}
+	}
+
+	return pod
+}
+
+func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
+	pod, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
+
+	if err != nil {
+		return err
+	}
+
+	if _, err := client.WaitForPod(ctx, pod.Namespace, pod.Name); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		GracePeriodSeconds: to.Ptr(int64(0)),
+	})
+}
