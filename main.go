@@ -11,11 +11,10 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/build"
-	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
-	"github.com/adrianliechti/loop/app/container"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/run"
 	"github.com/adrianliechti/loop/app/toolkit"
 	"github.com/adrianliechti/loop/pkg/cli"
 
@@ -59,9 +58,9 @@ func initApp() cli.Command {
 			connect.Command,
 			expose.Command,
 
+			run.Command,
+			//code.Command,
 			toolkit.Command,
-			code.Command,
-			container.Command,
 
 			build.Command,
 			docker.Command,

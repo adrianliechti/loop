@@ -98,16 +98,16 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		options = new(RunOptions)
 	}
 
-	name := options.Name
-
-	if name == "" {
-		name = "loop-buildkit-" + uuid.NewString()[0:7]
+	if options.Name == "" {
+		options.Name = "loop-build-" + uuid.NewString()[0:7]
 	}
 
-	namespace := options.Namespace
+	if options.Namespace == "" {
+		options.Namespace = client.Namespace()
+	}
 
-	if namespace == "" {
-		namespace = client.Namespace()
+	if options.Image == "" {
+		options.Image = "moby/buildkit:rootless"
 	}
 
 	if options.Stdout == nil {
@@ -138,7 +138,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		return err
 	}
 
-	pod := templatePod(ctx, client, namespace, name, options.Image)
+	pod := templatePod(ctx, client, options)
 
 	if options.OnPod != nil {
 		if err := options.OnPod(ctx, client, pod); err != nil {
@@ -146,7 +146,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		}
 	}
 
-	cli.Infof("★ creating container (%s/%s)...", namespace, name)
+	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
 
 	if err := startPod(ctx, client, pod); err != nil {
 		return err
@@ -154,7 +154,6 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 
 	defer func() {
 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
-
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
@@ -168,7 +167,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		return err
 	}
 
-	if err := client.PodExec(ctx, namespace, name, container, []string{"tar", "xf", "-", "-C", builderPath}, false, f, options.Stdout, options.Stderr); err != nil {
+	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"tar", "xf", "-", "-C", builderPath}, false, f, options.Stdout, options.Stderr); err != nil {
 		return err
 	}
 
@@ -202,7 +201,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 			return err
 		}
 
-		if err := client.PodExec(ctx, namespace, name, container, []string{"cp", "/dev/stdin", "/home/user/.docker/config.json"}, false, bytes.NewReader(data), options.Stdout, options.Stderr); err != nil {
+		if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"cp", "/dev/stdin", "/home/user/.docker/config.json"}, false, bytes.NewReader(data), options.Stdout, options.Stderr); err != nil {
 			return err
 		}
 	}
@@ -229,18 +228,14 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		"--output", strings.Join(output, ","),
 	}
 
-	if err := client.PodExec(ctx, namespace, name, container, build, false, f, options.Stdout, options.Stderr); err != nil {
+	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, build, false, f, options.Stdout, options.Stderr); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func templatePod(ctx context.Context, client kubernetes.Client, namespace, name, image string) *corev1.Pod {
-	if image == "" {
-		image = "moby/buildkit:rootless"
-	}
-
+func templatePod(ctx context.Context, client kubernetes.Client, options *RunOptions) *corev1.Pod {
 	probe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
@@ -258,8 +253,8 @@ func templatePod(ctx context.Context, client kubernetes.Client, namespace, name,
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      options.Name,
+			Namespace: options.Namespace,
 		},
 
 		Spec: corev1.PodSpec{
@@ -267,7 +262,7 @@ func templatePod(ctx context.Context, client kubernetes.Client, namespace, name,
 				{
 					Name: container,
 
-					Image:           image,
+					Image:           options.Image,
 					ImagePullPolicy: corev1.PullAlways,
 
 					Args: []string{
@@ -303,8 +298,6 @@ func templatePod(ctx context.Context, client kubernetes.Client, namespace, name,
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
-
 			Volumes: []corev1.Volume{
 				{
 					Name: "data",
@@ -319,6 +312,8 @@ func templatePod(ctx context.Context, client kubernetes.Client, namespace, name,
 					},
 				},
 			},
+
+			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
 	}
 

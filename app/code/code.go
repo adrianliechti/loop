@@ -1,288 +1,289 @@
 package code
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"strings"
-	"time"
+// import (
+// 	"context"
+// 	"fmt"
+// 	"os"
+// 	"strings"
+// 	"time"
 
-	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/remote"
-	"github.com/adrianliechti/loop/pkg/to"
-	"github.com/google/uuid"
+// 	"github.com/adrianliechti/loop/app"
+// 	"github.com/adrianliechti/loop/pkg/cli"
+// 	"github.com/adrianliechti/loop/pkg/kubernetes"
+// 	"github.com/adrianliechti/loop/pkg/remote/run"
+// 	"github.com/adrianliechti/loop/pkg/to"
 
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+// 	"github.com/google/uuid"
 
-var Command = &cli.Command{
-	Name:  "code",
-	Usage: "run cluster VS Code",
+// 	corev1 "k8s.io/api/core/v1"
+// 	rbacv1 "k8s.io/api/rbac/v1"
+// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+// )
 
-	Flags: []cli.Flag{
-		app.NamespaceFlag,
+// var Command = &cli.Command{
+// 	Name:  "code",
+// 	Usage: "run cluster VS Code",
 
-		&cli.StringFlag{
-			Name:  "stack",
-			Usage: "language stack",
-		},
+// 	Flags: []cli.Flag{
+// 		app.NamespaceFlag,
 
-		app.PortsFlag,
-	},
+// 		&cli.StringFlag{
+// 			Name:  "stack",
+// 			Usage: "language stack",
+// 		},
 
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		client := app.MustClient(ctx, cmd)
+// 		app.PortsFlag,
+// 	},
 
-		path, err := os.Getwd()
+// 	Action: func(ctx context.Context, cmd *cli.Command) error {
+// 		client := app.MustClient(ctx, cmd)
 
-		if err != nil {
-			return err
-		}
+// 		path, err := os.Getwd()
 
-		stacks := []string{
-			"default",
-			"golang",
-			"python",
-			"java",
-			"dotnet",
-		}
+// 		if err != nil {
+// 			return err
+// 		}
 
-		stack := cmd.String("stack")
+// 		stacks := []string{
+// 			"default",
+// 			"golang",
+// 			"python",
+// 			"java",
+// 			"dotnet",
+// 		}
 
-		if stack == "" {
-			i, _, err := cli.Select("select stack", stacks)
+// 		stack := cmd.String("stack")
 
-			if err != nil {
-				return err
-			}
+// 		if stack == "" {
+// 			i, _, err := cli.Select("select stack", stacks)
 
-			stack = stacks[i]
-		}
+// 			if err != nil {
+// 				return err
+// 			}
 
-		if stack == "latest" || stack == "default" {
-			stack = ""
-		}
+// 			stack = stacks[i]
+// 		}
 
-		port := app.MustPortOrRandom(ctx, cmd, 8888)
-		namespace := app.Namespace(ctx, cmd)
+// 		if stack == "latest" || stack == "default" {
+// 			stack = ""
+// 		}
 
-		if namespace == "" {
-			namespace = client.Namespace()
-		}
+// 		port := app.MustPortOrRandom(ctx, cmd, 8888)
+// 		namespace := app.Namespace(ctx, cmd)
 
-		tunnels, _ := app.Ports(ctx, cmd)
+// 		if namespace == "" {
+// 			namespace = client.Namespace()
+// 		}
 
-		return Run(ctx, client, stack, port, namespace, path, tunnels)
-	},
-}
+// 		tunnels, _ := app.Ports(ctx, cmd)
 
-func Run(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
-	if namespace == "" {
-		namespace = client.Namespace()
-	}
+// 		return Run(ctx, client, stack, port, namespace, path, tunnels)
+// 	},
+// }
 
-	image := "ghcr.io/adrianliechti/loop-code"
+// func Run(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
+// 	if namespace == "" {
+// 		namespace = client.Namespace()
+// 	}
 
-	if stack != "" {
-		image += ":" + strings.ToLower(stack)
-	}
+// 	image := "ghcr.io/adrianliechti/loop-code"
 
-	name := "loop-code-" + uuid.New().String()[0:7]
+// 	if stack != "" {
+// 		image += ":" + strings.ToLower(stack)
+// 	}
 
-	cli.Infof("★ creating container (%s/%s)...", namespace, name)
-	pod, err := startPod(ctx, client, namespace, name, image)
+// 	name := "loop-code-" + uuid.New().String()[0:7]
 
-	if err != nil {
-		return err
-	}
+// 	cli.Infof("★ creating container (%s/%s)...", namespace, name)
+// 	pod, err := startPod(ctx, client, namespace, name, image)
 
-	defer func() {
-		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
-		stopPod(context.Background(), client, pod.Namespace, pod.Name)
-	}()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	time.AfterFunc(5*time.Second, func() {
-		cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
-	})
+// 	defer func() {
+// 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
+// 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+// 	}()
 
-	if ports == nil {
-		ports = map[int]int{}
-	}
+// 	time.AfterFunc(5*time.Second, func() {
+// 		cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
+// 	})
 
-	ports[port] = 3000
+// 	if ports == nil {
+// 		ports = map[int]int{}
+// 	}
 
-	cli.Info("Press ctrl-c to stop remote VSCode server")
+// 	ports[port] = 3000
 
-	return remote.Run(ctx, client, pod.Namespace, pod.Name, path, ports)
-}
+// 	cli.Info("Press ctrl-c to stop remote VSCode server")
 
-func startPod(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
-	serviceaccount := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
+// 	return remote.Run(ctx, client, pod.Namespace, pod.Name, path, ports)
+// }
 
-	if _, err := client.CoreV1().ServiceAccounts(namespace).Create(ctx, serviceaccount, metav1.CreateOptions{}); err != nil {
-		return nil, err
-	}
+// func startPod(ctx context.Context, client kubernetes.Client, namespace, name, image string) (*corev1.Pod, error) {
+// 	serviceaccount := &corev1.ServiceAccount{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name: name,
+// 		},
+// 	}
 
-	clusterrolebinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+// 	if _, err := client.CoreV1().ServiceAccounts(namespace).Create(ctx, serviceaccount, metav1.CreateOptions{}); err != nil {
+// 		return nil, err
+// 	}
 
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "cluster-admin",
-		},
+// 	clusterrolebinding := &rbacv1.ClusterRoleBinding{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name: name,
+// 		},
 
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      name,
-				Namespace: namespace,
-			},
-		},
-	}
+// 		RoleRef: rbacv1.RoleRef{
+// 			APIGroup: "rbac.authorization.k8s.io",
+// 			Kind:     "ClusterRole",
+// 			Name:     "cluster-admin",
+// 		},
 
-	if _, err := client.RbacV1().ClusterRoleBindings().Create(ctx, clusterrolebinding, metav1.CreateOptions{}); err != nil {
-		return nil, err
-	}
+// 		Subjects: []rbacv1.Subject{
+// 			{
+// 				Kind:      "ServiceAccount",
+// 				Name:      name,
+// 				Namespace: namespace,
+// 			},
+// 		},
+// 	}
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+// 	if _, err := client.RbacV1().ClusterRoleBindings().Create(ctx, clusterrolebinding, metav1.CreateOptions{}); err != nil {
+// 		return nil, err
+// 	}
 
-		Spec: corev1.PodSpec{
-			ServiceAccountName: name,
+// 	pod := &corev1.Pod{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name: name,
+// 		},
 
-			InitContainers: []corev1.Container{
-				{
-					Name: "init-workspace",
+// 		Spec: corev1.PodSpec{
+// 			ServiceAccountName: name,
 
-					Image:           "public.ecr.aws/docker/library/busybox:stable",
-					ImagePullPolicy: corev1.PullAlways,
+// 			InitContainers: []corev1.Container{
+// 				{
+// 					Name: "init-workspace",
 
-					Command: []string{
-						"chown",
-						"1000:1000",
-						"/mnt",
-					},
-				},
-			},
+// 					Image:           "public.ecr.aws/docker/library/busybox:stable",
+// 					ImagePullPolicy: corev1.PullAlways,
 
-			Containers: []corev1.Container{
-				{
-					Name: "code",
+// 					Command: []string{
+// 						"chown",
+// 						"1000:1000",
+// 						"/mnt",
+// 					},
+// 				},
+// 			},
 
-					Image:           image,
-					ImagePullPolicy: corev1.PullAlways,
+// 			Containers: []corev1.Container{
+// 				{
+// 					Name: "code",
 
-					SecurityContext: &corev1.SecurityContext{
-						RunAsUser: to.Ptr(int64(1000)),
-					},
+// 					Image:           image,
+// 					ImagePullPolicy: corev1.PullAlways,
 
-					Env: []corev1.EnvVar{
-						{
-							Name:  "DOCKER_HOST",
-							Value: "tcp://127.0.0.1:2375",
-						},
-					},
+// 					SecurityContext: &corev1.SecurityContext{
+// 						RunAsUser: to.Ptr(int64(1000)),
+// 					},
 
-					Ports: []corev1.ContainerPort{
-						{
-							Name:          "http",
-							Protocol:      corev1.ProtocolTCP,
-							ContainerPort: int32(3000),
-						},
-					},
-				},
-				{
-					Name: "docker",
+// 					Env: []corev1.EnvVar{
+// 						{
+// 							Name:  "DOCKER_HOST",
+// 							Value: "tcp://127.0.0.1:2375",
+// 						},
+// 					},
 
-					Image:           "public.ecr.aws/docker/library/docker:27-dind-rootless",
-					ImagePullPolicy: corev1.PullAlways,
+// 					Ports: []corev1.ContainerPort{
+// 						{
+// 							Name:          "http",
+// 							Protocol:      corev1.ProtocolTCP,
+// 							ContainerPort: int32(3000),
+// 						},
+// 					},
+// 				},
+// 				{
+// 					Name: "docker",
 
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.Ptr(true),
-					},
+// 					Image:           "public.ecr.aws/docker/library/docker:27-dind-rootless",
+// 					ImagePullPolicy: corev1.PullAlways,
 
-					Env: []corev1.EnvVar{
-						{
-							Name:  "DOCKER_TLS_CERTDIR",
-							Value: "",
-						},
-					},
+// 					SecurityContext: &corev1.SecurityContext{
+// 						Privileged: to.Ptr(true),
+// 					},
 
-					Args: []string{
-						"--group",
-						"1000",
-						"--tls=false",
-					},
+// 					Env: []corev1.EnvVar{
+// 						{
+// 							Name:  "DOCKER_TLS_CERTDIR",
+// 							Value: "",
+// 						},
+// 					},
 
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "docker",
-							MountPath: "/var/lib/docker",
-						},
-						{
-							Name:      "modules",
-							MountPath: "/lib/modules",
-							ReadOnly:  true,
-						},
-					},
-				},
-			},
+// 					Args: []string{
+// 						"--group",
+// 						"1000",
+// 						"--tls=false",
+// 					},
 
-			Volumes: []corev1.Volume{
-				{
-					Name: "docker",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "modules",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/lib/modules",
-						},
-					},
-				},
-			},
+// 					VolumeMounts: []corev1.VolumeMount{
+// 						{
+// 							Name:      "docker",
+// 							MountPath: "/var/lib/docker",
+// 						},
+// 						{
+// 							Name:      "modules",
+// 							MountPath: "/lib/modules",
+// 							ReadOnly:  true,
+// 						},
+// 					},
+// 				},
+// 			},
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
-		},
-	}
+// 			Volumes: []corev1.Volume{
+// 				{
+// 					Name: "docker",
+// 					VolumeSource: corev1.VolumeSource{
+// 						EmptyDir: &corev1.EmptyDirVolumeSource{},
+// 					},
+// 				},
+// 				{
+// 					Name: "modules",
+// 					VolumeSource: corev1.VolumeSource{
+// 						HostPath: &corev1.HostPathVolumeSource{
+// 							Path: "/lib/modules",
+// 						},
+// 					},
+// 				},
+// 			},
 
-	if err := remote.UpdatePod(pod, "/mnt"); err != nil {
-		return nil, err
-	}
+// 			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+// 		},
+// 	}
 
-	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
-		return nil, err
-	}
+// 	if err := remote.UpdatePod(pod, "/mnt"); err != nil {
+// 		return nil, err
+// 	}
 
-	return client.WaitForPod(ctx, namespace, name)
-}
+// 	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+// 		return nil, err
+// 	}
 
-func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	if err := client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		// return err
-	}
+// 	return client.WaitForPod(ctx, namespace, name)
+// }
 
-	if err := client.RbacV1().ClusterRoleBindings().Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		// return err
-	}
+// func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+// 	if err := client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+// 		// return err
+// 	}
 
-	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Ptr(int64(0)),
-	})
-}
+// 	if err := client.RbacV1().ClusterRoleBindings().Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+// 		// return err
+// 	}
+
+// 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
+// 		GracePeriodSeconds: to.Ptr(int64(0)),
+// 	})
+// }
