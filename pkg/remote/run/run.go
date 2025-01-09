@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,10 +10,14 @@ import (
 
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
-	"github.com/docker/docker/pkg/idtools"
+
 	"github.com/google/uuid"
-	"github.com/moby/moby/pkg/archive"
+
+	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/idtools"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +67,9 @@ type RunOptions struct {
 }
 
 func Run(ctx context.Context, client kubernetes.Client, container *Container, options *RunOptions) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if options == nil {
 		options = new(RunOptions)
 	}
@@ -103,6 +111,11 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		return err
 	}
 
+	go func() {
+		connectTunnel(ctx, client, pod, container)
+		cancel()
+	}()
+
 	if options.OnReady != nil {
 		if err := options.OnReady(ctx, client, pod); err != nil {
 			return err
@@ -113,19 +126,6 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 }
 
 func templatePod(ctx context.Context, client kubernetes.Client, container *Container, options *RunOptions) *corev1.Pod {
-	var mounts []corev1.VolumeMount
-
-	for _, v := range container.Volumes {
-		mount := corev1.VolumeMount{
-			Name: "loop-data",
-
-			MountPath: v.Target,
-			SubPath:   strings.TrimLeft(v.Target, "/"),
-		}
-
-		mounts = append(mounts, mount)
-	}
-
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      options.Name,
@@ -142,38 +142,62 @@ func templatePod(ctx context.Context, client kubernetes.Client, container *Conta
 
 					TTY:   container.TTY,
 					Stdin: container.Stdin != nil,
-
-					VolumeMounts: mounts,
-				},
-				{
-					Name: "loop-tunnel",
-
-					Image:           options.Image,
-					ImagePullPolicy: corev1.PullAlways,
-
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name: "loop-data",
-
-							MountPath: "/data",
-						},
-					},
-				},
-			},
-
-			Volumes: []corev1.Volume{
-				{
-					Name: "loop-data",
-
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
 				},
 			},
 
 			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
 		},
 	}
+
+	if len(container.Volumes) == 0 && len(container.Ports) == 0 {
+		return pod
+	}
+
+	volume := corev1.Volume{
+		Name: "loop-data",
+
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
+
+	var mounts []corev1.VolumeMount
+
+	for _, v := range container.Volumes {
+		mount := corev1.VolumeMount{
+			Name: volume.Name,
+
+			MountPath: v.Target,
+			SubPath:   strings.TrimLeft(v.Target, "/"),
+		}
+
+		mounts = append(mounts, mount)
+	}
+
+	for i, c := range pod.Spec.InitContainers {
+		pod.Spec.InitContainers[i].VolumeMounts = append(c.VolumeMounts, mounts...)
+	}
+
+	for i, c := range pod.Spec.Containers {
+		pod.Spec.Containers[i].VolumeMounts = append(c.VolumeMounts, mounts...)
+	}
+
+	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+		Name: "loop-tunnel",
+
+		Image:           options.Image,
+		ImagePullPolicy: corev1.PullAlways,
+
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name: volume.Name,
+
+				MountPath: "/data",
+			},
+		},
+	})
 
 	return pod
 }
@@ -196,6 +220,92 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: to.Ptr(int64(0)),
 	})
+}
+
+func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, container *Container) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	port, err := system.FreePort(0)
+
+	if err != nil {
+		return err
+	}
+
+	ready := make(chan struct{})
+
+	go func() {
+		client.PodPortForward(ctx, pod.Namespace, pod.Name, "", map[int]int{port: 22}, ready)
+		cancel()
+	}()
+
+	<-ready
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	// config := &gossh.ClientConfig{
+	// 	User: "root",
+
+	// 	HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	// }
+
+	// conn, err := gossh.Dial("tcp", addr, config)
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// local, err := osfs.NewWatchableFS()
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// remote, err := sftpfs.NewWatchableFS(conn)
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	go func() {
+		if err := tunnelPorts(ctx, addr, container.Ports); err != nil {
+			cli.Error(err)
+		}
+
+		cancel()
+	}()
+
+	// go func() {
+	// 	if err := syncLocalVolumes(ctx, local, remote, options.Volumes); err != nil {
+	// 		cli.Error(err)
+	// 	}
+
+	// 	cancel()
+	// }()
+
+	// go func() {
+	// 	if err := syncRemoteVolumes(ctx, local, remote, options.Volumes); err != nil {
+	// 		cli.Error(err)
+	// 	}
+
+	// 	cancel()
+	// }()
+
+	<-ctx.Done()
+
+	return nil
+}
+
+func tunnelPorts(ctx context.Context, addr string, ports []Port) error {
+	var options []ssh.Option
+
+	for _, p := range ports {
+		options = append(options, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: p.Source, RemotePort: p.Target}))
+	}
+
+	client := ssh.New(addr, options...)
+
+	return client.Run(ctx)
 }
 
 func copyVolumes(ctx context.Context, client kubernetes.Client, namespace, name string, volumes []Volume) error {

@@ -17,9 +17,10 @@ import (
 	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/uuid"
-	"github.com/moby/moby/pkg/archive"
+
+	"github.com/docker/docker/pkg/archive"
+	"github.com/google/go-containerregistry/pkg/name"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
