@@ -291,13 +291,13 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 			cancel()
 		}()
 
-		// go func() {
-		// 	if err := syncRemoteVolumes(ctx, local, remote, options.Volumes); err != nil {
-		// 		cli.Error(err)
-		// 	}
+		go func() {
+			if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
+				cli.Error(err)
+			}
 
-		// 	cancel()
-		// }()
+			cancel()
+		}()
 	}
 
 	<-ctx.Done()
@@ -360,7 +360,7 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 	}
 
 	for e := range events {
-		if ignoredChanges(e.Path) {
+		if ignoredChange(e.Path) {
 			continue
 		}
 
@@ -370,7 +370,7 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 			continue
 		}
 
-		println(e.Action, e.Path, remotePath)
+		// println(e.Action, e.Path, remotePath)
 
 		switch e.Action {
 		case fs.Create, fs.Modify:
@@ -383,7 +383,7 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 			if r := filepath.Join(root, mapRemotePath(volumes, e.RenamedFrom)); r != root {
 				if _, err := remote.Stat(r); err == nil {
 					if err := remote.Rename(r, remotePath); err != nil {
-						cli.Error(err)
+						cli.Error("rename remote dir", err)
 						continue
 					}
 
@@ -392,14 +392,14 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 			}
 
 			if i, err := remote.Stat(remotePath); err == nil {
-				if i.ModTime().After(info.ModTime()) {
+				if i.ModTime().After(info.ModTime()) || i.ModTime().Equal(info.ModTime()) {
 					continue
 				}
 			}
 
 			if info.IsDir() {
 				if err := syncDir(ctx, remote, remotePath, local, e.Path); err != nil {
-					cli.Error(err)
+					cli.Error("create remote dir", err)
 					continue
 				}
 
@@ -407,7 +407,7 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 			}
 
 			if err := syncFile(ctx, remote, remotePath, local, e.Path); err != nil {
-				cli.Error(err)
+				cli.Error("create remote file", err)
 				continue
 			}
 
@@ -420,7 +420,7 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 
 			if info.IsDir() {
 				if err := remote.RemoveAll(remotePath); err != nil {
-					cli.Error(err)
+					cli.Error("remove remote dir", err)
 					continue
 				}
 
@@ -428,7 +428,100 @@ func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes
 			}
 
 			if err := remote.Remove(remotePath); err != nil {
-				cli.Error(err)
+				cli.Error("remove remote file", err)
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
+func syncRemoteVolumes(ctx context.Context, local, remote fs.WatchableFS, volumes []Volume) error {
+	root := "/data"
+
+	var paths []string
+
+	for _, v := range volumes {
+		paths = append(paths, filepath.Join("/data", v.Target))
+	}
+
+	events, err := remote.Watch(ctx, paths...)
+
+	if err != nil {
+		return err
+	}
+
+	for e := range events {
+		if ignoredChange(e.Path) {
+			continue
+		}
+
+		localPath := mapLocalPath(volumes, strings.TrimPrefix(e.Path, root))
+
+		if localPath == "" {
+			continue
+		}
+
+		// println(e.Action, e.Path, localPath)
+
+		switch e.Action {
+		case fs.Create, fs.Modify:
+			info, err := remote.Stat(e.Path)
+
+			if err != nil {
+				continue
+			}
+
+			if l := mapLocalPath(volumes, strings.TrimPrefix(e.RenamedFrom, root)); l != "" {
+				if _, err := local.Stat(l); err == nil {
+					if err := local.Rename(l, localPath); err != nil {
+						cli.Error("remove local file", err)
+						continue
+					}
+
+					continue
+				}
+			}
+
+			if i, err := local.Stat(localPath); err == nil {
+				if i.ModTime().After(info.ModTime()) || i.ModTime().Equal(info.ModTime()) {
+					continue
+				}
+			}
+
+			if info.IsDir() {
+				if err := syncDir(ctx, local, localPath, remote, e.Path); err != nil {
+					cli.Error("create local dir", err)
+					continue
+				}
+
+				continue
+			}
+
+			if err := syncFile(ctx, local, localPath, remote, e.Path); err != nil {
+				cli.Error("create local file", err)
+				continue
+			}
+
+		case fs.Remove:
+			info, err := local.Stat(localPath)
+
+			if err != nil {
+				continue
+			}
+
+			if info.IsDir() {
+				if err := local.RemoveAll(localPath); err != nil {
+					cli.Error("delete local dir", err)
+					continue
+				}
+
+				continue
+			}
+
+			if err := local.Remove(localPath); err != nil {
+				cli.Error("delete local file", err)
 				continue
 			}
 		}
@@ -539,7 +632,7 @@ func mapRemotePath(volumes []Volume, path string) string {
 	return filepath.Join(longestValue, rel)
 }
 
-func ignoredChanges(path string) bool {
+func ignoredChange(path string) bool {
 	ext := filepath.Ext(path)
 
 	if ext == ".tmp" {
