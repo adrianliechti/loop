@@ -9,12 +9,17 @@ import (
 	"strings"
 
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/fs"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/adrianliechti/loop/pkg/to"
 
+	osfs "github.com/adrianliechti/loop/pkg/fs/os"
+	sftpfs "github.com/adrianliechti/loop/pkg/fs/sftp"
+
 	"github.com/google/uuid"
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
@@ -243,53 +248,57 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// config := &gossh.ClientConfig{
-	// 	User: "root",
+	if len(container.Ports) > 0 {
+		go func() {
+			if err := tunnelPorts(ctx, addr, container.Ports); err != nil {
+				cli.Error(err)
+			}
 
-	// 	HostKeyCallback: gossh.InsecureIgnoreHostKey(),
-	// }
+			cancel()
+		}()
+	}
 
-	// conn, err := gossh.Dial("tcp", addr, config)
+	if len(container.Volumes) > 0 {
+		config := &gossh.ClientConfig{
+			User: "root",
 
-	// if err != nil {
-	// 	return err
-	// }
-
-	// local, err := osfs.NewWatchableFS()
-
-	// if err != nil {
-	// 	return err
-	// }
-
-	// remote, err := sftpfs.NewWatchableFS(conn)
-
-	// if err != nil {
-	// 	return err
-	// }
-
-	go func() {
-		if err := tunnelPorts(ctx, addr, container.Ports); err != nil {
-			cli.Error(err)
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 		}
 
-		cancel()
-	}()
+		conn, err := gossh.Dial("tcp", addr, config)
 
-	// go func() {
-	// 	if err := syncLocalVolumes(ctx, local, remote, options.Volumes); err != nil {
-	// 		cli.Error(err)
-	// 	}
+		if err != nil {
+			return err
+		}
 
-	// 	cancel()
-	// }()
+		local, err := osfs.NewWatchableFS()
 
-	// go func() {
-	// 	if err := syncRemoteVolumes(ctx, local, remote, options.Volumes); err != nil {
-	// 		cli.Error(err)
-	// 	}
+		if err != nil {
+			return err
+		}
 
-	// 	cancel()
-	// }()
+		remote, err := sftpfs.NewWatchableFS(conn)
+
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
+				cli.Error(err)
+			}
+
+			cancel()
+		}()
+
+		// go func() {
+		// 	if err := syncRemoteVolumes(ctx, local, remote, options.Volumes); err != nil {
+		// 		cli.Error(err)
+		// 	}
+
+		// 	cancel()
+		// }()
+	}
 
 	<-ctx.Done()
 
@@ -333,4 +342,209 @@ func copyVolumes(ctx context.Context, client kubernetes.Client, namespace, name 
 	}
 
 	return nil
+}
+
+func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes []Volume) error {
+	root := "/data"
+
+	var paths []string
+
+	for _, v := range volumes {
+		paths = append(paths, v.Source)
+	}
+
+	events, err := local.Watch(ctx, paths...)
+
+	if err != nil {
+		return err
+	}
+
+	for e := range events {
+		if ignoredChanges(e.Path) {
+			continue
+		}
+
+		remotePath := filepath.Join(root, mapRemotePath(volumes, e.Path))
+
+		if remotePath == "" {
+			continue
+		}
+
+		println(e.Action, e.Path, remotePath)
+
+		switch e.Action {
+		case fs.Create, fs.Modify:
+			info, err := local.Stat(e.Path)
+
+			if err != nil {
+				continue
+			}
+
+			if r := filepath.Join(root, mapRemotePath(volumes, e.RenamedFrom)); r != root {
+				if _, err := remote.Stat(r); err == nil {
+					if err := remote.Rename(r, remotePath); err != nil {
+						cli.Error(err)
+						continue
+					}
+
+					continue
+				}
+			}
+
+			if i, err := remote.Stat(remotePath); err == nil {
+				if i.ModTime().After(info.ModTime()) {
+					continue
+				}
+			}
+
+			if info.IsDir() {
+				if err := syncDir(ctx, remote, remotePath, local, e.Path); err != nil {
+					cli.Error(err)
+					continue
+				}
+
+				continue
+			}
+
+			if err := syncFile(ctx, remote, remotePath, local, e.Path); err != nil {
+				cli.Error(err)
+				continue
+			}
+
+		case fs.Remove:
+			info, err := remote.Stat(remotePath)
+
+			if err != nil {
+				continue
+			}
+
+			if info.IsDir() {
+				if err := remote.RemoveAll(remotePath); err != nil {
+					cli.Error(err)
+					continue
+				}
+
+				continue
+			}
+
+			if err := remote.Remove(remotePath); err != nil {
+				cli.Error(err)
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
+func syncFile(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath string) error {
+	t, err := src.Create(filepath.Join(filepath.Dir(srcPath), uuid.NewString()+".tmp"))
+
+	if err != nil {
+		return err
+	}
+
+	defer t.Close()
+
+	f, err := dst.Open(dstPath)
+
+	if err != nil {
+		return err
+	}
+
+	i, err := f.Stat()
+
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	if _, err := io.Copy(t, f); err != nil {
+		return err
+	}
+
+	t.Close()
+	f.Close()
+
+	os.Chtimes(t.Name(), i.ModTime(), i.ModTime())
+
+	return src.Rename(t.Name(), srcPath)
+}
+
+func syncDir(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath string) error {
+	return dst.WalkDir(dstPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, _ := filepath.Rel(dstPath, path)
+		name := filepath.Join(srcPath, rel)
+
+		i, err := d.Info()
+
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			if err := src.Mkdir(name, i.Mode()); err != nil {
+				return err
+			}
+
+			src.Chtimes(name, i.ModTime(), i.ModTime())
+
+			return nil
+		}
+
+		return syncFile(ctx, src, name, dst, path)
+	})
+}
+
+func mapLocalPath(volumes []Volume, path string) string {
+	if path == "" {
+		return ""
+	}
+
+	longestMatch := ""
+	longestValue := ""
+
+	for _, v := range volumes {
+		if strings.HasPrefix(path, v.Target) && len(v.Target) > len(longestMatch) {
+			longestMatch = v.Target
+			longestValue = v.Source
+		}
+	}
+
+	rel, _ := filepath.Rel(longestMatch, path)
+	return filepath.Join(longestValue, rel)
+}
+
+func mapRemotePath(volumes []Volume, path string) string {
+	if path == "" {
+		return ""
+	}
+
+	longestMatch := ""
+	longestValue := ""
+
+	for _, v := range volumes {
+		if strings.HasPrefix(path, v.Source) && len(v.Source) > len(longestMatch) {
+			longestMatch = v.Source
+			longestValue = v.Target
+		}
+	}
+
+	rel, _ := filepath.Rel(longestMatch, path)
+	return filepath.Join(longestValue, rel)
+}
+
+func ignoredChanges(path string) bool {
+	ext := filepath.Ext(path)
+
+	if ext == ".tmp" {
+		return true
+	}
+
+	return false
 }
