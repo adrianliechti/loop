@@ -531,11 +531,15 @@ func syncRemoteVolumes(ctx context.Context, local, remote fs.WatchableFS, volume
 }
 
 func syncFile(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath string) error {
-	t, err := src.Create(filepath.Join(filepath.Dir(srcPath), uuid.NewString()+".tmp"))
+	tmp := filepath.Join(filepath.Dir(srcPath), uuid.NewString()+".tmp")
+
+	t, err := src.Create(tmp)
 
 	if err != nil {
 		return err
 	}
+
+	defer src.Remove(tmp)
 
 	defer t.Close()
 
