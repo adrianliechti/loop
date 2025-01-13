@@ -18,6 +18,10 @@ import (
 
 	"github.com/google/uuid"
 
+	osfs "github.com/adrianliechti/loop/pkg/fs/os"
+	sftpfs "github.com/adrianliechti/loop/pkg/fs/sftp"
+	gossh "golang.org/x/crypto/ssh"
+
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
 
@@ -57,12 +61,22 @@ type Volume struct {
 	Identity *Identity
 }
 
+type SyncMode string
+
+const (
+	SyncModeNone SyncMode = ""
+	SyncLocal    SyncMode = "local"
+	SyncRemote   SyncMode = "remote"
+)
+
 type RunOptions struct {
 	Name      string
 	Namespace string
 
 	// Loop Tunnel image overwrite
 	Image string
+
+	SyncMode SyncMode
 
 	OnPod   func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnReady func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
@@ -114,7 +128,7 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 	}
 
 	go func() {
-		connectTunnel(ctx, client, pod, container)
+		connectTunnel(ctx, client, pod, container, options)
 		cancel()
 	}()
 
@@ -224,7 +238,7 @@ func stopPod(ctx context.Context, client kubernetes.Client, namespace, name stri
 	})
 }
 
-func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, container *Container) error {
+func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, container *Container, options *RunOptions) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -256,45 +270,49 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 	}
 
 	if len(container.Volumes) > 0 {
-		// config := &gossh.ClientConfig{
-		// 	User: "root",
+		config := &gossh.ClientConfig{
+			User: "root",
 
-		// 	HostKeyCallback: gossh.InsecureIgnoreHostKey(),
-		// }
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		}
 
-		// conn, err := gossh.Dial("tcp", addr, config)
+		conn, err := gossh.Dial("tcp", addr, config)
 
-		// if err != nil {
-		// 	return err
-		// }
+		if err != nil {
+			return err
+		}
 
-		// local, err := osfs.NewWatchableFS()
+		local, err := osfs.NewWatchableFS()
 
-		// if err != nil {
-		// 	return err
-		// }
+		if err != nil {
+			return err
+		}
 
-		// remote, err := sftpfs.NewWatchableFS(conn)
+		remote, err := sftpfs.NewWatchableFS(conn)
 
-		// if err != nil {
-		// 	return err
-		// }
+		if err != nil {
+			return err
+		}
 
-		// go func() {
-		// 	if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
-		// 		cli.Error(err)
-		// 	}
+		if options.SyncMode == SyncLocal {
+			go func() {
+				if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
+					cli.Error(err)
+				}
 
-		// 	cancel()
-		// }()
+				cancel()
+			}()
+		}
 
-		// go func() {
-		// 	if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
-		// 		cli.Error(err)
-		// 	}
+		if options.SyncMode == SyncRemote {
+			go func() {
+				if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
+					cli.Error(err)
+				}
 
-		// 	cancel()
-		// }()
+				cancel()
+			}()
+		}
 	}
 
 	<-ctx.Done()

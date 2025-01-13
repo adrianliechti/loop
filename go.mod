@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/lipgloss v1.0.0
-	github.com/docker/docker v27.4.1+incompatible
+	github.com/docker/docker v27.5.0+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/google/go-containerregistry v0.20.2
