@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -93,12 +94,18 @@ func mustParseVolumes(volumes []string) []run.Volume {
 	for _, v := range volumes {
 		parts := strings.Split(v, ":")
 
-		if len(parts) != 2 {
+		if len(parts) < 2 {
 			panic("volume must be in the form of 'source:target'")
 		}
 
-		source := parts[0]
-		target := parts[1]
+		source := strings.Join(parts[:len(parts)-1], ":")
+		target := parts[len(parts)-1]
+
+		source, err := filepath.Abs(source)
+
+		if err != nil {
+			source = ""
+		}
 
 		if source == "" || target == "" {
 			panic("invalid volume mount")
