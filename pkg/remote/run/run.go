@@ -581,6 +581,9 @@ func syncFile(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath
 
 	os.Chtimes(t.Name(), i.ModTime(), i.ModTime())
 
+	dir := path.Dir(t.Name())
+	src.MkdirAll(dir, 0755)
+
 	return src.Rename(t.Name(), srcPath)
 }
 
@@ -612,7 +615,7 @@ func syncDir(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath 
 		}
 
 		if d.IsDir() {
-			if err := src.Mkdir(name, i.Mode()); err != nil {
+			if err := src.MkdirAll(name, i.Mode()); err != nil {
 				return err
 			}
 
