@@ -10,7 +10,6 @@ require (
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/docker/docker v27.5.0+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
-	github.com/gliderlabs/ssh v0.3.8
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/uuid v1.6.0
 	github.com/lmittmann/tint v1.0.6
@@ -33,7 +32,6 @@ require (
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/catppuccin/go v0.2.0 // indirect

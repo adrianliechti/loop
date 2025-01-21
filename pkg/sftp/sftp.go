@@ -1,77 +1,130 @@
 package sftp
 
 import (
-	"context"
-	"errors"
+	"crypto/rand"
+	"crypto/rsa"
 	"io"
-	"time"
+	"net"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 )
 
 type Server struct {
-	server *ssh.Server
+	addr string
+	root string
+
+	config *ssh.ServerConfig
+
+	listener net.Listener
 }
 
-func NewServer(addr, path string) *Server {
-	s := &ssh.Server{
-		Addr: addr,
-
-		Handler: func(s ssh.Session) {
-			io.WriteString(s, "SFTP server ready. Use SFTP for file transfer.\n")
-		},
-
-		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(s ssh.Session) {
-
-				srv := NewRequestServer(s, path)
-
-				if err := srv.Serve(); err != nil {
-					srv.Close()
-				}
-			},
+func NewServer(addr, root string) (*Server, error) {
+	config := &ssh.ServerConfig{
+		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+			return nil, nil
 		},
 	}
+
+	signer, err := generateSigner()
+
+	if err != nil {
+		return nil, err
+	}
+
+	config.AddHostKey(signer)
 
 	return &Server{
-		server: s,
-	}
+		addr: addr,
+		root: root,
+
+		config: config,
+	}, nil
 }
 
 func (s *Server) Close() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := s.server.Shutdown(ctx); err != nil {
-		if errors.Is(err, ssh.ErrServerClosed) {
-			return nil
-		}
-
-		return err
-	}
-
-	if err := s.server.Close(); err != nil {
-		if errors.Is(err, ssh.ErrServerClosed) {
-			return nil
-		}
-
-		return err
+	if s.listener != nil {
+		s.listener.Close()
+		s.listener = nil
 	}
 
 	return nil
 }
 
 func (s *Server) ListenAndServe() error {
-	if err := s.server.ListenAndServe(); err != nil {
-		if errors.Is(err, ssh.ErrServerClosed) {
-			return nil
-		}
+	l, err := net.Listen("tcp", s.addr)
 
+	if err != nil {
 		return err
 	}
 
+	for {
+		c, err := l.Accept()
+
+		if err != nil {
+			return err
+		}
+
+		go s.HandleConn(c)
+	}
+}
+
+func (s *Server) HandleConn(c net.Conn) error {
+	_, chans, reqs, err := ssh.NewServerConn(c, s.config)
+
+	if err != nil {
+		return err
+	}
+
+	go ssh.DiscardRequests(reqs)
+
+	for ch := range chans {
+		if ch.ChannelType() != "session" {
+			ch.Reject(ssh.UnknownChannelType, "unknown channel type")
+			continue
+		}
+
+		channel, requests, err := ch.Accept()
+
+		if err != nil {
+			continue
+		}
+
+		go func(in <-chan *ssh.Request) {
+			for req := range in {
+				switch req.Type {
+				case "subsystem":
+					if string(req.Payload[4:]) == "sftp" {
+						req.Reply(true, nil)
+						continue
+					}
+				}
+
+				req.Reply(false, nil)
+
+			}
+		}(requests)
+
+		server := NewRequestServer(channel, s.root)
+
+		if err := server.Serve(); err != nil {
+			return err
+		}
+
+		server.Close()
+	}
+
 	return nil
+}
+
+func generateSigner() (ssh.Signer, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ssh.NewSignerFromKey(key)
 }
 
 type RequestServer struct {

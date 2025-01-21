@@ -9,7 +9,11 @@ import (
 )
 
 func startServer(ctx context.Context, port int, path string) error {
-	s := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
+	s, err := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
+
+	if err != nil {
+		return err
+	}
 
 	go func() {
 		<-ctx.Done()
