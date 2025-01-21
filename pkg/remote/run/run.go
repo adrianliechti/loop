@@ -2,15 +2,14 @@ package run
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/adrianliechti/loop/pkg/cli"
-	"github.com/adrianliechti/loop/pkg/fs"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
@@ -64,9 +63,10 @@ type Volume struct {
 type SyncMode string
 
 const (
-	SyncModeNone SyncMode = ""
-	SyncLocal    SyncMode = "local"
-	SyncRemote   SyncMode = "remote"
+	SyncModeNone   SyncMode = ""
+	SyncModeMount  SyncMode = "mount"
+	SyncModeLocal  SyncMode = "local"
+	SyncModeRemote SyncMode = "remote"
 )
 
 type RunOptions struct {
@@ -102,6 +102,10 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		options.Image = "ghcr.io/adrianliechti/loop-tunnel"
 	}
 
+	if options.SyncMode == SyncModeMount && len(container.Volumes) > 1 {
+		return errors.New("mount mode currently only supports a single volume")
+	}
+
 	pod := templatePod(ctx, client, container, options)
 
 	if options.OnPod != nil {
@@ -121,10 +125,12 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
 
-	cli.Infof("★ copying volumes data...")
+	if options.SyncMode != SyncModeMount {
+		cli.Infof("★ copying volumes data...")
 
-	if err := copyVolumes(ctx, client, pod.Namespace, pod.Name, container.Volumes); err != nil {
-		return err
+		if err := copyVolumes(ctx, client, pod.Namespace, pod.Name, container.Volumes); err != nil {
+			return err
+		}
 	}
 
 	go func() {
@@ -189,6 +195,10 @@ func templatePod(ctx context.Context, client kubernetes.Client, container *Conta
 			SubPath:   strings.TrimLeft(v.Target, "/"),
 		}
 
+		if options.SyncMode == SyncModeMount {
+			mount.MountPropagation = to.Ptr(corev1.MountPropagationHostToContainer)
+		}
+
 		mounts = append(mounts, mount)
 	}
 
@@ -200,11 +210,13 @@ func templatePod(ctx context.Context, client kubernetes.Client, container *Conta
 		pod.Spec.Containers[i].VolumeMounts = append(c.VolumeMounts, mounts...)
 	}
 
-	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+	tunnel := corev1.Container{
 		Name: "loop-tunnel",
 
 		Image:           options.Image,
 		ImagePullPolicy: corev1.PullAlways,
+
+		SecurityContext: &corev1.SecurityContext{},
 
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -213,7 +225,14 @@ func templatePod(ctx context.Context, client kubernetes.Client, container *Conta
 				MountPath: "/data",
 			},
 		},
-	})
+	}
+
+	if options.SyncMode == SyncModeMount {
+		tunnel.SecurityContext.Privileged = to.Ptr(true)
+		tunnel.VolumeMounts[0].MountPropagation = to.Ptr(corev1.MountPropagationBidirectional)
+	}
+
+	pod.Spec.Containers = append(pod.Spec.Containers, tunnel)
 
 	return pod
 }
@@ -269,7 +288,41 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 		}()
 	}
 
-	if len(container.Volumes) > 0 {
+	if len(container.Volumes) > 0 && options.SyncMode == SyncModeMount {
+		volume := container.Volumes[0]
+
+		sftpport, err := system.FreePort(0)
+
+		if err != nil {
+			return err
+		}
+
+		if err := startServer(ctx, sftpport, volume.Source); err != nil {
+			return err
+		}
+
+		targetPath := path.Join("/data", volume.Target)
+
+		options := []ssh.Option{
+			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpport, RemotePort: 2222}),
+			ssh.WithCommand("sshfs -o allow_other -p 2222 root@localhost:/ " + targetPath + " && /bin/sleep infinity"),
+
+			ssh.WithStderr(os.Stderr),
+			ssh.WithStdout(os.Stdout),
+		}
+
+		c := ssh.New(addr, options...)
+
+		go func() {
+			if err := c.Run(ctx); err != nil {
+				cli.Error(err)
+			}
+
+			cancel()
+		}()
+	}
+
+	if len(container.Volumes) > 0 && (options.SyncMode == SyncModeLocal || options.SyncMode == SyncModeRemote) {
 		config := &gossh.ClientConfig{
 			User: "root",
 
@@ -294,7 +347,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 			return err
 		}
 
-		if options.SyncMode == SyncLocal {
+		if options.SyncMode == SyncModeLocal {
 			go func() {
 				if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
 					cli.Error(err)
@@ -304,7 +357,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 			}()
 		}
 
-		if options.SyncMode == SyncRemote {
+		if options.SyncMode == SyncModeRemote {
 			go func() {
 				if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
 					cli.Error(err)
@@ -357,321 +410,4 @@ func copyVolumes(ctx context.Context, client kubernetes.Client, namespace, name 
 	}
 
 	return nil
-}
-
-func syncLocalChanges(ctx context.Context, local, remote fs.WatchableFS, volumes []Volume) error {
-	root := "/data"
-
-	var paths []string
-
-	for _, v := range volumes {
-		paths = append(paths, v.Source)
-	}
-
-	events, err := local.Watch(ctx, paths...)
-
-	if err != nil {
-		return err
-	}
-
-	for e := range events {
-		if ignoredChange(e.Path) {
-			continue
-		}
-
-		remotePath := path.Join(root, mapRemotePath(volumes, e.Path))
-
-		if remotePath == "" {
-			continue
-		}
-
-		// println(e.Action, e.Path, remotePath)
-
-		switch e.Action {
-		case fs.Create, fs.Modify:
-			info, err := local.Stat(e.Path)
-
-			if err != nil {
-				continue
-			}
-
-			if r := path.Join(root, mapRemotePath(volumes, e.RenamedFrom)); r != root {
-				if _, err := remote.Stat(r); err == nil {
-					if err := remote.Rename(r, remotePath); err != nil {
-						cli.Error("rename remote dir", err)
-						continue
-					}
-
-					continue
-				}
-			}
-
-			if i, err := remote.Stat(remotePath); err == nil {
-				if i.ModTime().After(info.ModTime()) || i.ModTime().Equal(info.ModTime()) {
-					continue
-				}
-			}
-
-			if info.IsDir() {
-				if err := syncDir(ctx, remote, remotePath, local, e.Path); err != nil {
-					cli.Error("create remote dir", err)
-					continue
-				}
-
-				continue
-			}
-
-			if err := syncFile(ctx, remote, remotePath, local, e.Path); err != nil {
-				cli.Error("create remote file", err)
-				continue
-			}
-
-		case fs.Remove:
-			info, err := remote.Stat(remotePath)
-
-			if err != nil {
-				continue
-			}
-
-			if info.IsDir() {
-				if err := remote.RemoveAll(remotePath); err != nil {
-					cli.Error("remove remote dir", err)
-					continue
-				}
-
-				continue
-			}
-
-			if err := remote.Remove(remotePath); err != nil {
-				cli.Error("remove remote file", err)
-				continue
-			}
-		}
-	}
-
-	return nil
-}
-
-func syncRemoteVolumes(ctx context.Context, local, remote fs.WatchableFS, volumes []Volume) error {
-	root := "/data"
-
-	var paths []string
-
-	for _, v := range volumes {
-		paths = append(paths, path.Join("/data", v.Target))
-	}
-
-	events, err := remote.Watch(ctx, paths...)
-
-	if err != nil {
-		return err
-	}
-
-	for e := range events {
-		if ignoredChange(e.Path) {
-			continue
-		}
-
-		localPath := mapLocalPath(volumes, strings.TrimPrefix(e.Path, root))
-
-		if localPath == "" {
-			continue
-		}
-
-		// println(e.Action, e.Path, localPath)
-
-		switch e.Action {
-		case fs.Create, fs.Modify:
-			info, err := remote.Stat(e.Path)
-
-			if err != nil {
-				continue
-			}
-
-			if l := mapLocalPath(volumes, strings.TrimPrefix(e.RenamedFrom, root)); l != "" {
-				if _, err := local.Stat(l); err == nil {
-					if err := local.Rename(l, localPath); err != nil {
-						cli.Error("remove local file", err)
-						continue
-					}
-
-					continue
-				}
-			}
-
-			if i, err := local.Stat(localPath); err == nil {
-				if i.ModTime().After(info.ModTime()) || i.ModTime().Equal(info.ModTime()) {
-					continue
-				}
-			}
-
-			if info.IsDir() {
-				if err := syncDir(ctx, local, localPath, remote, e.Path); err != nil {
-					cli.Error("create local dir", err)
-					continue
-				}
-
-				continue
-			}
-
-			if err := syncFile(ctx, local, localPath, remote, e.Path); err != nil {
-				cli.Error("create local file", err)
-				continue
-			}
-
-		case fs.Remove:
-			info, err := local.Stat(localPath)
-
-			if err != nil {
-				continue
-			}
-
-			if info.IsDir() {
-				if err := local.RemoveAll(localPath); err != nil {
-					cli.Error("delete local dir", err)
-					continue
-				}
-
-				continue
-			}
-
-			if err := local.Remove(localPath); err != nil {
-				cli.Error("delete local file", err)
-				continue
-			}
-		}
-	}
-
-	return nil
-}
-
-func syncFile(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath string) error {
-	tmp := path.Join(path.Dir(srcPath), uuid.NewString()+".tmp")
-
-	t, err := src.Create(tmp)
-
-	if err != nil {
-		return err
-	}
-
-	defer src.Remove(tmp)
-
-	defer t.Close()
-
-	f, err := dst.Open(dstPath)
-
-	if err != nil {
-		return err
-	}
-
-	i, err := f.Stat()
-
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	if _, err := io.Copy(t, f); err != nil {
-		return err
-	}
-
-	t.Close()
-	f.Close()
-
-	os.Chtimes(t.Name(), i.ModTime(), i.ModTime())
-
-	dir := path.Dir(t.Name())
-	src.MkdirAll(dir, 0755)
-
-	return src.Rename(t.Name(), srcPath)
-}
-
-func relPath(base, targpath string) string {
-	base = path.Clean(filepath.ToSlash(base))
-
-	targpath = path.Clean(filepath.ToSlash(targpath))
-	targpath = strings.TrimLeft(targpath, "/")
-
-	rel := strings.TrimPrefix(targpath, base)
-	rel = strings.TrimLeft(rel, "/")
-
-	return rel
-}
-
-func syncDir(ctx context.Context, src fs.FS, srcPath string, dst fs.FS, dstPath string) error {
-	return dst.WalkDir(dstPath, func(dirPath string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel := relPath(dstPath, dirPath)
-		name := path.Join(srcPath, rel)
-
-		i, err := d.Info()
-
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			if err := src.MkdirAll(name, i.Mode()); err != nil {
-				return err
-			}
-
-			src.Chtimes(name, i.ModTime(), i.ModTime())
-
-			return nil
-		}
-
-		return syncFile(ctx, src, name, dst, dirPath)
-	})
-}
-
-func mapLocalPath(volumes []Volume, remotePath string) string {
-	if remotePath == "" {
-		return ""
-	}
-
-	longestMatch := ""
-	longestValue := ""
-
-	for _, v := range volumes {
-		if strings.HasPrefix(remotePath, v.Target) && len(v.Target) > len(longestMatch) {
-			longestMatch = v.Target
-			longestValue = v.Source
-		}
-	}
-
-	rel, _ := filepath.Rel(longestMatch, filepath.FromSlash(remotePath))
-	return filepath.Join(longestValue, rel)
-}
-
-func mapRemotePath(volumes []Volume, localPath string) string {
-	if localPath == "" {
-		return ""
-	}
-
-	longestMatch := ""
-	longestValue := ""
-
-	for _, v := range volumes {
-		if strings.HasPrefix(localPath, v.Source) && len(v.Source) > len(longestMatch) {
-			longestMatch = v.Source
-			longestValue = v.Target
-		}
-	}
-
-	rel := relPath(longestMatch, filepath.ToSlash(localPath))
-	return path.Join(longestValue, rel)
-}
-
-func ignoredChange(name string) bool {
-	ext := path.Ext(name)
-
-	if ext == ".tmp" {
-		return true
-	}
-
-	return false
 }
