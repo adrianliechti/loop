@@ -17,10 +17,6 @@ import (
 
 	"github.com/google/uuid"
 
-	osfs "github.com/adrianliechti/loop/pkg/fs/os"
-	sftpfs "github.com/adrianliechti/loop/pkg/fs/sftp"
-	gossh "golang.org/x/crypto/ssh"
-
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
 
@@ -63,10 +59,10 @@ type Volume struct {
 type SyncMode string
 
 const (
-	SyncModeNone   SyncMode = ""
-	SyncModeMount  SyncMode = "mount"
-	SyncModeLocal  SyncMode = "local"
-	SyncModeRemote SyncMode = "remote"
+	SyncModeNone  SyncMode = ""
+	SyncModeMount SyncMode = "mount"
+	// SyncModeLocal  SyncMode = "local"
+	// SyncModeRemote SyncMode = "remote"
 )
 
 type RunOptions struct {
@@ -106,7 +102,7 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		return errors.New("mount mode currently only supports a single volume")
 	}
 
-	pod := templatePod(ctx, client, container, options)
+	pod := templatePod(container, options)
 
 	if options.OnPod != nil {
 		if err := options.OnPod(ctx, client, pod); err != nil {
@@ -147,7 +143,7 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 	return client.PodAttach(ctx, pod.Namespace, pod.Name, "main", container.TTY, container.Stdin, container.Stdout, container.Stderr)
 }
 
-func templatePod(ctx context.Context, client kubernetes.Client, container *Container, options *RunOptions) *corev1.Pod {
+func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      options.Name,
@@ -322,51 +318,51 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 		}()
 	}
 
-	if len(container.Volumes) > 0 && (options.SyncMode == SyncModeLocal || options.SyncMode == SyncModeRemote) {
-		config := &gossh.ClientConfig{
-			User: "root",
+	// if len(container.Volumes) > 0 && (options.SyncMode == SyncModeLocal || options.SyncMode == SyncModeRemote) {
+	// 	config := &gossh.ClientConfig{
+	// 		User: "root",
 
-			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
-		}
+	// 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+	// 	}
 
-		conn, err := gossh.Dial("tcp", addr, config)
+	// 	conn, err := gossh.Dial("tcp", addr, config)
 
-		if err != nil {
-			return err
-		}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		local, err := osfs.NewWatchableFS()
+	// 	local, err := osfs.NewWatchableFS()
 
-		if err != nil {
-			return err
-		}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		remote, err := sftpfs.NewWatchableFS(conn)
+	// 	remote, err := sftpfs.NewWatchableFS(conn)
 
-		if err != nil {
-			return err
-		}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		if options.SyncMode == SyncModeLocal {
-			go func() {
-				if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
-					cli.Error(err)
-				}
+	// 	if options.SyncMode == SyncModeLocal {
+	// 		go func() {
+	// 			if err := syncLocalChanges(ctx, local, remote, container.Volumes); err != nil {
+	// 				cli.Error(err)
+	// 			}
 
-				cancel()
-			}()
-		}
+	// 			cancel()
+	// 		}()
+	// 	}
 
-		if options.SyncMode == SyncModeRemote {
-			go func() {
-				if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
-					cli.Error(err)
-				}
+	// 	if options.SyncMode == SyncModeRemote {
+	// 		go func() {
+	// 			if err := syncRemoteVolumes(ctx, local, remote, container.Volumes); err != nil {
+	// 				cli.Error(err)
+	// 			}
 
-				cancel()
-			}()
-		}
-	}
+	// 			cancel()
+	// 		}()
+	// 	}
+	// }
 
 	<-ctx.Done()
 
