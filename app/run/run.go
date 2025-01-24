@@ -56,6 +56,8 @@ var Command = &cli.Command{
 
 		options := &run.RunOptions{
 			Namespace: namespace,
+
+			SyncMode: run.SyncModeMount,
 		}
 
 		return run.Run(ctx, client, container, options)

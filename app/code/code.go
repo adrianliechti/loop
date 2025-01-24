@@ -1,85 +1,136 @@
 package code
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"os"
-// 	"strings"
-// 	"time"
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
 
-// 	"github.com/adrianliechti/loop/app"
-// 	"github.com/adrianliechti/loop/pkg/cli"
-// 	"github.com/adrianliechti/loop/pkg/kubernetes"
-// 	"github.com/adrianliechti/loop/pkg/remote/run"
-// 	"github.com/adrianliechti/loop/pkg/to"
+	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/remote/run"
+	"github.com/google/uuid"
 
-// 	"github.com/google/uuid"
+	corev1 "k8s.io/api/core/v1"
+)
 
-// 	corev1 "k8s.io/api/core/v1"
-// 	rbacv1 "k8s.io/api/rbac/v1"
-// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// )
+var Command = &cli.Command{
+	Name:  "code",
+	Usage: "run cluster VS Code",
 
-// var Command = &cli.Command{
-// 	Name:  "code",
-// 	Usage: "run cluster VS Code",
+	Flags: []cli.Flag{
+		app.NamespaceFlag,
 
-// 	Flags: []cli.Flag{
-// 		app.NamespaceFlag,
+		&cli.StringFlag{
+			Name:  "stack",
+			Usage: "language stack",
+		},
 
-// 		&cli.StringFlag{
-// 			Name:  "stack",
-// 			Usage: "language stack",
-// 		},
+		app.PortsFlag,
+	},
 
-// 		app.PortsFlag,
-// 	},
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		client := app.MustClient(ctx, cmd)
 
-// 	Action: func(ctx context.Context, cmd *cli.Command) error {
-// 		client := app.MustClient(ctx, cmd)
+		path, err := os.Getwd()
 
-// 		path, err := os.Getwd()
+		if err != nil {
+			return err
+		}
 
-// 		if err != nil {
-// 			return err
-// 		}
+		stacks := []string{
+			"default",
+			"golang",
+			"python",
+			"java",
+			"dotnet",
+		}
 
-// 		stacks := []string{
-// 			"default",
-// 			"golang",
-// 			"python",
-// 			"java",
-// 			"dotnet",
-// 		}
+		stack := cmd.String("stack")
 
-// 		stack := cmd.String("stack")
+		if stack == "" {
+			i, _, err := cli.Select("select stack", stacks)
 
-// 		if stack == "" {
-// 			i, _, err := cli.Select("select stack", stacks)
+			if err != nil {
+				return err
+			}
 
-// 			if err != nil {
-// 				return err
-// 			}
+			stack = stacks[i]
+		}
 
-// 			stack = stacks[i]
-// 		}
+		if stack == "latest" || stack == "default" {
+			stack = ""
+		}
 
-// 		if stack == "latest" || stack == "default" {
-// 			stack = ""
-// 		}
+		image := "ghcr.io/adrianliechti/loop-code"
 
-// 		port := app.MustPortOrRandom(ctx, cmd, 8888)
-// 		namespace := app.Namespace(ctx, cmd)
+		if stack != "" {
+			image += ":" + strings.ToLower(stack)
+		}
 
-// 		if namespace == "" {
-// 			namespace = client.Namespace()
-// 		}
+		port := app.MustPortOrRandom(ctx, cmd, 8888)
+		namespace := app.Namespace(ctx, cmd)
 
-// 		tunnels, _ := app.Ports(ctx, cmd)
+		if namespace == "" {
+			namespace = client.Namespace()
+		}
 
-// 		return Run(ctx, client, stack, port, namespace, path, tunnels)
-// 	},
-// }
+		ports, _ := app.Ports(ctx, cmd)
+
+		if ports == nil {
+			ports = map[int]int{}
+		}
+
+		ports[port] = 3000
+
+		var runPorts []run.Port
+
+		for s, t := range ports {
+			runPorts = append(runPorts, run.Port{
+				Source: s,
+				Target: t,
+			})
+		}
+
+		var runVolumes []run.Volume
+
+		runVolumes = append(runVolumes, run.Volume{
+			Source: path,
+			Target: "/src",
+
+			Identity: &run.Identity{
+				UID: 1000,
+				GID: 1000,
+			},
+		})
+
+		container := &run.Container{
+			Image: image,
+
+			Stdout: os.Stdout,
+			Stderr: os.Stderr,
+
+			Ports:   runPorts,
+			Volumes: runVolumes,
+		}
+
+		options := &run.RunOptions{
+			Name:      "loop-code-" + uuid.NewString()[0:7],
+			Namespace: namespace,
+
+			SyncMode: run.SyncModeMount,
+		}
+
+		options.OnReady = func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
+			cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
+
+			return nil
+		}
+
+		return run.Run(ctx, client, container, options)
+	},
+}
 
 // func Run(ctx context.Context, client kubernetes.Client, stack string, port int, namespace, path string, ports map[int]int) error {
 // 	if namespace == "" {

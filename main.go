@@ -11,6 +11,7 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/build"
+	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
@@ -59,7 +60,7 @@ func initApp() cli.Command {
 			expose.Command,
 
 			run.Command,
-			//code.Command,
+			code.Command,
 			toolkit.Command,
 
 			build.Command,
