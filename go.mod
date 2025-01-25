@@ -9,7 +9,6 @@ require (
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/docker/docker v27.5.1+incompatible
-	github.com/fsnotify/fsnotify v1.8.0
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/uuid v1.6.0
 	github.com/lmittmann/tint v1.0.6
