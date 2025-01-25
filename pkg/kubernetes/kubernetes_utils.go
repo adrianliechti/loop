@@ -14,6 +14,18 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+func Deref[T any](ptr *T, def T) T {
+	if ptr != nil {
+		return *ptr
+	}
+
+	return def
+}
+
 func (c *client) ServicePods(ctx context.Context, namespace, name string) ([]corev1.Pod, error) {
 	service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 

@@ -7,7 +7,7 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/to"
+
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
@@ -95,7 +95,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 
 			RestartPolicy: corev1.RestartPolicyNever,
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+			TerminationGracePeriodSeconds: kubernetes.Ptr(int64(10)),
 
 			Volumes: []corev1.Volume{
 				{
