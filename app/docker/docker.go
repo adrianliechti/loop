@@ -10,7 +10,6 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
 
@@ -113,7 +112,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 					ImagePullPolicy: corev1.PullAlways,
 
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: to.Ptr(true),
+						Privileged: kubernetes.Ptr(true),
 					},
 
 					Env: []corev1.EnvVar{
@@ -166,7 +165,7 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+			TerminationGracePeriodSeconds: kubernetes.Ptr(int64(10)),
 		},
 	}
 

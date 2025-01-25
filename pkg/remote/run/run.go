@@ -13,7 +13,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
-	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/google/uuid"
 
@@ -163,7 +162,7 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+			TerminationGracePeriodSeconds: kubernetes.Ptr(int64(10)),
 		},
 	}
 
@@ -192,7 +191,7 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 		}
 
 		if options.SyncMode == SyncModeMount {
-			mount.MountPropagation = to.Ptr(corev1.MountPropagationHostToContainer)
+			mount.MountPropagation = kubernetes.Ptr(corev1.MountPropagationHostToContainer)
 		}
 
 		mounts = append(mounts, mount)
@@ -224,8 +223,8 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 	}
 
 	if options.SyncMode == SyncModeMount {
-		tunnel.SecurityContext.Privileged = to.Ptr(true)
-		tunnel.VolumeMounts[0].MountPropagation = to.Ptr(corev1.MountPropagationBidirectional)
+		tunnel.SecurityContext.Privileged = kubernetes.Ptr(true)
+		tunnel.VolumeMounts[0].MountPropagation = kubernetes.Ptr(corev1.MountPropagationBidirectional)
 	}
 
 	pod.Spec.Containers = append(pod.Spec.Containers, tunnel)
@@ -249,7 +248,7 @@ func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) er
 
 func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Ptr(int64(0)),
+		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
 	})
 }
 

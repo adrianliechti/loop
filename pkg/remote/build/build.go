@@ -14,7 +14,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/to"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
@@ -279,8 +278,8 @@ func templatePod(ctx context.Context, client kubernetes.Client, options *RunOpti
 							Type: corev1.SeccompProfileTypeUnconfined,
 						},
 
-						RunAsUser:  to.Ptr(int64(1000)),
-						RunAsGroup: to.Ptr(int64(1000)),
+						RunAsUser:  kubernetes.Ptr(int64(1000)),
+						RunAsGroup: kubernetes.Ptr(int64(1000)),
 					},
 
 					ReadinessProbe: probe,
@@ -314,7 +313,7 @@ func templatePod(ctx context.Context, client kubernetes.Client, options *RunOpti
 				},
 			},
 
-			TerminationGracePeriodSeconds: to.Ptr(int64(10)),
+			TerminationGracePeriodSeconds: kubernetes.Ptr(int64(10)),
 		},
 	}
 
@@ -349,6 +348,6 @@ func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) er
 
 func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
-		GracePeriodSeconds: to.Ptr(int64(0)),
+		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
 	})
 }
