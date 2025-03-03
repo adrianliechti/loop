@@ -109,14 +109,14 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 
 	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
 
-	if err := startPod(ctx, client, pod); err != nil {
-		return err
-	}
-
 	defer func() {
 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
+
+	if err := startPod(ctx, client, pod); err != nil {
+		return err
+	}
 
 	if options.SyncMode != SyncModeMount {
 		cli.Infof("★ copying volumes data...")
