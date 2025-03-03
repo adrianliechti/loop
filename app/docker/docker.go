@@ -55,6 +55,8 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		currentContext = strings.TrimRight(string(val), "\n")
 	}
 
+	cli.Infof("★ creating container (%s/%s)...", namespace, name)
+
 	defer func() {
 		cli.Info("★ resetting Docker context to \"" + currentContext + "\"")
 		exec.Command(docker, "context", "use", currentContext).Run()
@@ -66,7 +68,6 @@ func connectDaemon(ctx context.Context, client kubernetes.Client, namespace stri
 		deleteDaemon(context.Background(), client, namespace, name)
 	}()
 
-	cli.Infof("★ creating container (%s/%s)...", namespace, name)
 	pod, err := createDaemon(ctx, client, namespace, name)
 
 	if err != nil {

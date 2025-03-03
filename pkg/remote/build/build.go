@@ -148,14 +148,14 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 
 	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
 
-	if err := startPod(ctx, client, pod); err != nil {
-		return err
-	}
-
 	defer func() {
 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 	}()
+
+	if err := startPod(ctx, client, pod); err != nil {
+		return err
+	}
 
 	cli.Infof("★ copying build context...")
 

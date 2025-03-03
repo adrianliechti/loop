@@ -50,6 +50,10 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 		return err
 	}
 
+	defer func() {
+		client.CoreV1().Secrets(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	}()
+
 	if _, err := client.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -64,7 +68,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 	}
 
 	defer func() {
-		client.CoreV1().Secrets(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		client.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
 	}()
 
 	if _, err := client.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
@@ -111,10 +115,6 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 	}, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-
-	defer func() {
-		client.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	}()
 
 	if _, err := client.WaitForPod(ctx, namespace, name); err != nil {
 		return err
