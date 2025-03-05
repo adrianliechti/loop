@@ -52,6 +52,8 @@ type RunOptions struct {
 
 	OnPod     func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnContext func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, path string) error
+	OnReady   func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnDelete  func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 }
 
 func (i *Image) String() string {
@@ -151,6 +153,10 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 	defer func() {
 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+
+		if options.OnDelete != nil {
+			options.OnDelete(ctx, client, pod)
+		}
 	}()
 
 	if err := startPod(ctx, client, pod); err != nil {
@@ -206,6 +212,12 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		}
 	}
 
+	if options.OnReady != nil {
+		if err := options.OnReady(ctx, client, pod); err != nil {
+			return err
+		}
+	}
+
 	output := []string{
 		"type=image",
 		"push=true",
@@ -228,11 +240,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		"--output", strings.Join(output, ","),
 	}
 
-	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, build, false, f, options.Stdout, options.Stderr); err != nil {
-		return err
-	}
-
-	return nil
+	return client.PodExec(ctx, pod.Namespace, pod.Name, container, build, false, f, options.Stdout, options.Stderr)
 }
 
 func templatePod(ctx context.Context, client kubernetes.Client, options *RunOptions) *corev1.Pod {

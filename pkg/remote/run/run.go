@@ -71,8 +71,9 @@ type RunOptions struct {
 
 	SyncMode SyncMode
 
-	OnPod   func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
-	OnReady func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnPod    func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnReady  func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnDelete func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 }
 
 func Run(ctx context.Context, client kubernetes.Client, container *Container, options *RunOptions) error {
@@ -112,6 +113,10 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 	defer func() {
 		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+
+		if options.OnDelete != nil {
+			options.OnDelete(ctx, client, pod)
+		}
 	}()
 
 	if err := startPod(ctx, client, pod); err != nil {
