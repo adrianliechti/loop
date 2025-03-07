@@ -10,14 +10,12 @@ import (
 	"strings"
 
 	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 
 	"github.com/google/uuid"
-
-	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/idtools"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -341,22 +339,23 @@ func copyVolumes(ctx context.Context, client kubernetes.Client, namespace, name 
 	for _, v := range volumes {
 		path := path.Join("/data", v.Target)
 
-		options := &archive.TarOptions{}
+		options := &docker.TarballOptions{}
 
 		if v.Identity != nil {
-			options.ChownOpts = &idtools.Identity{
-				UID: v.Identity.UID,
-				GID: v.Identity.GID,
-			}
+			options.UID = &v.Identity.UID
+			options.GID = &v.Identity.GID
 		}
 
-		tar, err := archive.TarWithOptions(v.Source, options)
+		r, w := io.Pipe()
 
-		if err != nil {
-			return err
-		}
+		go func() {
+			defer r.Close()
 
-		if err := client.PodExec(ctx, namespace, name, "loop-tunnel", []string{"tar", "xf", "-", "-C", path}, false, tar, os.Stdout, os.Stdout); err != nil {
+			docker.WriteTarball(w, v.Source, options)
+
+		}()
+
+		if err := client.PodExec(ctx, namespace, name, "loop-tunnel", []string{"tar", "xf", "-", "-C", path}, false, r, os.Stdout, os.Stdout); err != nil {
 			return err
 		}
 	}
