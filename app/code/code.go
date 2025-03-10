@@ -45,6 +45,7 @@ var Command = &cli.Command{
 			"python",
 			"java",
 			"dotnet",
+			"azure",
 		}
 
 		stack := cmd.String("stack")
