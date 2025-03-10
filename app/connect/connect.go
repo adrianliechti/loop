@@ -51,7 +51,13 @@ func Connect(ctx context.Context, client kubernetes.Client, namespaces []string,
 		scope = client.Namespace()
 	}
 
-	catapult, err := catapult.New(client, catapult.CatapultOptions{
+	hostsFile, err := system.NewAtomicFile(system.HostsFilePath())
+
+	if err != nil {
+		return err
+	}
+
+	catapult, err := catapult.New(client, hostsFile, catapult.CatapultOptions{
 		Scope:      scope,
 		Namespaces: namespaces,
 
@@ -70,7 +76,7 @@ func Connect(ctx context.Context, client kubernetes.Client, namespaces []string,
 		return err
 	}
 
-	gateway, err := gateway.New(client, gateway.GatewayOptions{
+	gateway, err := gateway.New(client, hostsFile, gateway.GatewayOptions{
 		Namespaces: namespaces,
 
 		Logger: slog.Default(),

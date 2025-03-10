@@ -2,7 +2,6 @@ package system
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"slices"
@@ -10,13 +9,12 @@ import (
 )
 
 type HostsSection struct {
-	name string
-	path string
-
+	name  string
 	hosts map[string][]string
+	file  *AtomicFile
 }
 
-func NewHostsSection(name string) (*HostsSection, error) {
+func HostsFilePath() string {
 	path := "/etc/hosts"
 
 	if runtime.GOOS == "windows" {
@@ -27,11 +25,14 @@ func NewHostsSection(name string) (*HostsSection, error) {
 		path = val
 	}
 
-	return &HostsSection{
-		name: name,
-		path: path,
+	return path
+}
 
+func NewHostsSection(name string, file *AtomicFile) (*HostsSection, error) {
+	return &HostsSection{
+		name:  name,
 		hosts: make(map[string][]string),
+		file:  file,
 	}, nil
 }
 
@@ -54,15 +55,7 @@ func (s *HostsSection) Flush() error {
 		ln = "\r\n"
 	}
 
-	file, err := os.OpenFile(s.path, os.O_RDWR, 0644)
-
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
+	data, err := s.file.ReadAll()
 
 	if err != nil {
 		return err
@@ -76,7 +69,13 @@ func (s *HostsSection) Flush() error {
 	sectionStart := strings.Index(text, headerStart)
 	sectionEnd := strings.LastIndex(text, headerEnd)
 
-	if sectionStart > 0 && sectionEnd > 0 {
+	sectionFound := sectionStart >= 0 && sectionEnd > sectionStart
+
+	if !sectionFound && len(s.hosts) == 0 {
+		return nil
+	}
+
+	if sectionFound {
 		text = text[:sectionStart] + text[sectionEnd+len(headerEnd):]
 	}
 
@@ -97,15 +96,7 @@ func (s *HostsSection) Flush() error {
 
 	text = strings.TrimRight(text, ln) + ln
 
-	if _, err := file.Seek(0, 0); err != nil {
-		return err
-	}
-
-	if err := file.Truncate(0); err != nil {
-		return err
-	}
-
-	if _, err := file.WriteString(text); err != nil {
+	if _, err := s.file.WriteString(text); err != nil {
 		return err
 	}
 

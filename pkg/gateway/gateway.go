@@ -48,8 +48,8 @@ type GatewayOptions struct {
 	DeleteFunc func(address string, hosts []string, ports []int)
 }
 
-func New(client kubernetes.Client, options GatewayOptions) (*Gateway, error) {
-	hosts, err := system.NewHostsSection("Loop Gateway")
+func New(client kubernetes.Client, file *system.AtomicFile, options GatewayOptions) (*Gateway, error) {
+	hosts, err := system.NewHostsSection("Loop Gateway", file)
 
 	if err != nil {
 		return nil, err

@@ -44,8 +44,8 @@ type CatapultOptions struct {
 	DeleteFunc func(address string, hosts []string, ports []int)
 }
 
-func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
-	hosts, err := system.NewHostsSection("Loop Catapult")
+func New(client kubernetes.Client, file *system.AtomicFile, options CatapultOptions) (*Catapult, error) {
+	hosts, err := system.NewHostsSection("Loop Catapult", file)
 
 	if err != nil {
 		return nil, err
