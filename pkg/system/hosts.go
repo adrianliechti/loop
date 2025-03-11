@@ -2,11 +2,12 @@ package system
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/rogpeppe/go-internal/lockedfile"
 )
 
 type HostsSection struct {
@@ -54,15 +55,7 @@ func (s *HostsSection) Flush() error {
 		ln = "\r\n"
 	}
 
-	file, err := os.OpenFile(s.path, os.O_RDWR, 0644)
-
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
+	data, err := lockedfile.Read(s.path)
 
 	if err != nil {
 		return err
@@ -97,17 +90,7 @@ func (s *HostsSection) Flush() error {
 
 	text = strings.TrimRight(text, ln) + ln
 
-	if _, err := file.Seek(0, 0); err != nil {
-		return err
-	}
-
-	if err := file.Truncate(0); err != nil {
-		return err
-	}
-
-	if _, err := file.WriteString(text); err != nil {
-		return err
-	}
+	lockedfile.Write(s.path, strings.NewReader(text), 0644)
 
 	return nil
 }

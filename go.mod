@@ -12,6 +12,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pkg/sftp v1.13.7
+	github.com/rogpeppe/go-internal v1.13.1
 	github.com/urfave/cli/v3 v3.0.0-alpha9.7
 	golang.org/x/crypto v0.33.0
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac
@@ -73,7 +74,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
