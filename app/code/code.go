@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/remote/run"
 	"github.com/google/uuid"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 
 	"github.com/google/uuid"

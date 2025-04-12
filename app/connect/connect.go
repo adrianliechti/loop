@@ -5,9 +5,9 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/pkg/catapult"
-	"github.com/adrianliechti/loop/pkg/cli"
 	"github.com/adrianliechti/loop/pkg/gateway"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
