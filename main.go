@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/build"
@@ -17,7 +18,6 @@ import (
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/run"
 	"github.com/adrianliechti/loop/app/toolkit"
-	"github.com/adrianliechti/loop/pkg/cli"
 
 	"github.com/lmittmann/tint"
 )

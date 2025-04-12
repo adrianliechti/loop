@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/adrianliechti/loop/pkg/cli"
+	"github.com/adrianliechti/go-cli"
 )
 
 var NameFlag = &cli.StringFlag{
