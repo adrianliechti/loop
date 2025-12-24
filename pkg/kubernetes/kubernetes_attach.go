@@ -58,7 +58,9 @@ func (c *client) PodAttach(ctx context.Context, namespace, name, container strin
 			Raw: true,
 		}
 
-		streamOptions.TerminalSizeQueue = t.MonitorSize(t.GetSize())
+		streamOptions.TerminalSizeQueue = &terminalSizeQueueAdapter{
+			delegate: t.MonitorSize(t.GetSize()),
+		}
 
 		return t.Safe(func() error {
 			return exec.StreamWithContext(ctx, streamOptions)

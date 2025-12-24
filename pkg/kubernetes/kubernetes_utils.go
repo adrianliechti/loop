@@ -11,7 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/remotecommand"
 	watchtools "k8s.io/client-go/tools/watch"
+	"k8s.io/kubectl/pkg/util/term"
 )
 
 func Ptr[T any](v T) *T {
@@ -252,4 +254,22 @@ func serviceReady(event watch.Event) (bool, error) {
 	}
 
 	return false, nil
+}
+
+type terminalSizeQueueAdapter struct {
+	delegate term.TerminalSizeQueue
+}
+
+func (a *terminalSizeQueueAdapter) Next() *remotecommand.TerminalSize {
+	if a.delegate == nil {
+		return nil
+	}
+	next := a.delegate.Next()
+	if next == nil {
+		return nil
+	}
+	return &remotecommand.TerminalSize{
+		Width:  next.Width,
+		Height: next.Height,
+	}
 }
