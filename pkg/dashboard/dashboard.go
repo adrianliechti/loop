@@ -26,6 +26,9 @@ type DashboardOptions struct {
 	OpenAIKey     string
 	OpenAIModel   string
 	OpenAIBaseURL string
+
+	PlatformNamespaces  []string
+	PlatformSpaceLabels []string
 }
 
 func Run(ctx context.Context, client kubernetes.Client, options *DashboardOptions) error {
@@ -102,10 +105,28 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 			ai := map[string]any{}
 
 			if options.OpenAIModel != "" {
-				config["model"] = options.OpenAIModel
+				ai["model"] = options.OpenAIModel
 			}
 
 			config["ai"] = ai
+		}
+
+		if len(options.PlatformNamespaces) > 0 || len(options.PlatformSpaceLabels) > 0 {
+			platform := map[string]any{}
+
+			if len(options.PlatformNamespaces) > 0 {
+				platform["namespaces"] = options.PlatformNamespaces
+			}
+
+			if len(options.PlatformSpaceLabels) > 0 {
+				spaces := map[string]any{
+					"labels": options.PlatformSpaceLabels,
+				}
+
+				platform["spaces"] = spaces
+			}
+
+			config["platform"] = platform
 		}
 
 		json.NewEncoder(w).Encode(config)
