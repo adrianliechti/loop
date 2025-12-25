@@ -5,7 +5,9 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -63,6 +65,8 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 	proxy := &httputil.ReverseProxy{
 		Transport: tr,
 
+		ErrorLog: log.New(io.Discard, "", 0),
+
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
 			r.Out.Host = target.Host
@@ -80,6 +84,8 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 		}
 
 		proxy := &httputil.ReverseProxy{
+			ErrorLog: log.New(io.Discard, "", 0),
+
 			Rewrite: func(r *httputil.ProxyRequest) {
 				r.Out.URL.Path = strings.TrimPrefix(r.Out.URL.Path, "/openai/v1")
 
