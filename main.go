@@ -14,6 +14,7 @@ import (
 	"github.com/adrianliechti/loop/app/build"
 	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
+	"github.com/adrianliechti/loop/app/dashboard"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/run"
@@ -54,6 +55,7 @@ func initApp() cli.Command {
 		},
 
 		Commands: []*cli.Command{
+			dashboard.Command,
 			application.Command,
 
 			connect.Command,
