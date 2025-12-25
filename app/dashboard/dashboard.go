@@ -2,21 +2,12 @@ package dashboard
 
 import (
 	"context"
-	"embed"
-	"fmt"
-	"io/fs"
-	"net/http"
-	"net/http/httputil"
+	"os"
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
+	"github.com/adrianliechti/loop/pkg/dashboard"
 	"github.com/adrianliechti/loop/pkg/system"
-	"k8s.io/client-go/rest"
-)
-
-var (
-	//go:embed public/*
-	publicFS embed.FS
 )
 
 var Command = &cli.Command{
@@ -30,7 +21,6 @@ var Command = &cli.Command{
 
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
-		config := client.Config()
 
 		port, err := system.FreePort(8888)
 
@@ -38,46 +28,20 @@ var Command = &cli.Command{
 			return err
 		}
 
-		tr, err := rest.TransportFor(config)
+		openaiKey := os.Getenv("OPENAI_API_KEY")
+		openaiURL := os.Getenv("OPENAI_BASE_URL")
 
-		if err != nil {
-			return err
+		if openaiURL == "" && openaiKey != "" {
+			openaiURL = "https://api.openai.com/v1"
 		}
 
-		target, path, err := rest.DefaultServerUrlFor(config)
+		options := &dashboard.DashboardOptions{
+			Port: port,
 
-		if err != nil {
-			return fmt.Errorf("failed to parse host: %w", err)
+			OpenAIKey:     openaiKey,
+			OpenAIBaseURL: openaiURL,
 		}
 
-		target.Path = path
-
-		fs, _ := fs.Sub(publicFS, "public")
-
-		mux := http.NewServeMux()
-
-		proxy := &httputil.ReverseProxy{
-			Transport: tr,
-
-			Rewrite: func(r *httputil.ProxyRequest) {
-				r.SetURL(target)
-				r.Out.Host = target.Host
-			},
-		}
-
-		mux.Handle("/api/", proxy)
-		mux.Handle("/", http.FileServerFS(fs))
-
-		server := &http.Server{
-			Addr:    fmt.Sprintf("localhost:%d", port),
-			Handler: mux,
-		}
-
-		go func() {
-			<-ctx.Done()
-			server.Shutdown(context.Background())
-		}()
-
-		return server.ListenAndServe()
+		return dashboard.Run(ctx, client, options)
 	},
 }
