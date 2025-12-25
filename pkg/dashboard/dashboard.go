@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -23,6 +24,7 @@ type DashboardOptions struct {
 	Port int
 
 	OpenAIKey     string
+	OpenAIModel   string
 	OpenAIBaseURL string
 }
 
@@ -65,6 +67,7 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 	}
 
 	mux.Handle("/api/", proxy)
+	mux.Handle("/apis/", proxy)
 
 	if options.OpenAIBaseURL != "" {
 		target, err := url.Parse(options.OpenAIBaseURL)
@@ -89,6 +92,24 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 
 		mux.Handle("/openai/v1/", proxy)
 	}
+
+	mux.HandleFunc("GET /config.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		config := map[string]any{}
+
+		if options.OpenAIBaseURL != "" {
+			ai := map[string]any{}
+
+			if options.OpenAIModel != "" {
+				config["model"] = options.OpenAIModel
+			}
+
+			config["ai"] = ai
+		}
+
+		json.NewEncoder(w).Encode(config)
+	})
 
 	mux.Handle("/", http.FileServerFS(fs))
 
