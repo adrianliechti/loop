@@ -10,7 +10,6 @@ import (
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/app/application"
 	"github.com/adrianliechti/loop/app/build"
 	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
@@ -56,7 +55,6 @@ func initApp() cli.Command {
 
 		Commands: []*cli.Command{
 			dashboard.Command,
-			application.Command,
 
 			connect.Command,
 			expose.Command,
