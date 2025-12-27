@@ -18,13 +18,13 @@ import (
 )
 
 var (
-	//go:embed public/*
+	//go:embed all:public
 	publicFS embed.FS
+
+	PublicFS, _ = fs.Sub(publicFS, "public")
 )
 
 type DashboardOptions struct {
-	Port int
-
 	OpenAIKey     string
 	OpenAIModel   string
 	OpenAIBaseURL string
@@ -33,13 +33,9 @@ type DashboardOptions struct {
 	PlatformSpaceLabels []string
 }
 
-func Run(ctx context.Context, client kubernetes.Client, options *DashboardOptions) error {
+func NewHandler(client kubernetes.Client, options *DashboardOptions) (http.Handler, error) {
 	if options == nil {
 		options = new(DashboardOptions)
-	}
-
-	if options.Port == 0 {
-		options.Port = 8888
 	}
 
 	config := client.Config()
@@ -47,18 +43,16 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 	tr, err := rest.TransportFor(config)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	target, path, err := rest.DefaultServerUrlFor(config)
 
 	if err != nil {
-		return fmt.Errorf("failed to parse host: %w", err)
+		return nil, fmt.Errorf("failed to parse host: %w", err)
 	}
 
 	target.Path = path
-
-	fs, _ := fs.Sub(publicFS, "public")
 
 	mux := http.NewServeMux()
 
@@ -80,7 +74,7 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 		target, err := url.Parse(options.OpenAIBaseURL)
 
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		proxy := &httputil.ReverseProxy{
@@ -138,10 +132,24 @@ func Run(ctx context.Context, client kubernetes.Client, options *DashboardOption
 		json.NewEncoder(w).Encode(config)
 	})
 
-	mux.Handle("/", http.FileServerFS(fs))
+	mux.Handle("/", http.FileServerFS(PublicFS))
+
+	return mux, nil
+}
+
+func ListenAndServe(ctx context.Context, addr string, client kubernetes.Client, options *DashboardOptions) error {
+	if options == nil {
+		options = new(DashboardOptions)
+	}
+
+	mux, err := NewHandler(client, options)
+
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("localhost:%d", options.Port),
+		Addr:    addr,
 		Handler: mux,
 	}
 

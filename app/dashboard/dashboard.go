@@ -43,9 +43,9 @@ var Command = &cli.Command{
 			}
 		}
 
-		options := &dashboard.DashboardOptions{
-			Port: port,
+		addr := fmt.Sprintf("localhost:%d", port)
 
+		options := &dashboard.DashboardOptions{
 			OpenAIKey:     openaiKey,
 			OpenAIModel:   openaiModel,
 			OpenAIBaseURL: openaiURL,
@@ -55,6 +55,6 @@ var Command = &cli.Command{
 			cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
 		})
 
-		return dashboard.Run(ctx, client, options)
+		return dashboard.ListenAndServe(ctx, addr, client, options)
 	},
 }
