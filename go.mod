@@ -1,10 +1,10 @@
 module github.com/adrianliechti/loop
 
-go 1.25.5
+go 1.25.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/adrianliechti/bridge v0.0.1
+	github.com/adrianliechti/bridge v0.0.2-0.20251228154243-6106391eb866
 	github.com/adrianliechti/go-cli v0.0.10
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/uuid v1.6.0
