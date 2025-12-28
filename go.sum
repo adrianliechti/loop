@@ -6,8 +6,8 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/adrianliechti/bridge v0.0.1 h1:RNzAEJrus9Xx0I1vLioAVns/c8MHUgjuu/65rWwJIw4=
 github.com/adrianliechti/bridge v0.0.1/go.mod h1:AtDM9D+1qmUP9vbmFex6X7MtDOWx7YltNwXxpYTeVLs=
-github.com/adrianliechti/go-cli v0.0.9-0.20251224221129-e598926b8cc9 h1:/sOYVvfbX8HpD76B3I89zEbSBCVZkXKOByKDh6I7d44=
-github.com/adrianliechti/go-cli v0.0.9-0.20251224221129-e598926b8cc9/go.mod h1:omm1cFDnHj/Yei11SZksg0yG7Y+znIJkLSolZcHdjFU=
+github.com/adrianliechti/go-cli v0.0.10 h1:XA+voEb+S45DByt/ZnUrEwKn9lEtOEkwxA4QwYX5Rqk=
+github.com/adrianliechti/go-cli v0.0.10/go.mod h1:NfJnUAcdy4f+G8l9mKqQNb9xJBaX0PlcSq2NZkIVMYk=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
