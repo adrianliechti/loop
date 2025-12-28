@@ -1,4 +1,4 @@
-package dashboard
+package bridge
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/dashboard"
+	"github.com/adrianliechti/loop/pkg/bridge"
 	"github.com/adrianliechti/loop/pkg/system"
 )
 
 var Command = &cli.Command{
-	Name:  "dashboard",
-	Usage: "open Kubernetes dashboard",
+	Name:  "bridge",
+	Usage: "open Bridge",
 
 	Flags: []cli.Flag{
 		app.ScopeFlag,
@@ -43,18 +43,24 @@ var Command = &cli.Command{
 			}
 		}
 
-		addr := fmt.Sprintf("localhost:%d", port)
-
-		options := &dashboard.DashboardOptions{
+		options := &bridge.Options{
 			OpenAIKey:     openaiKey,
 			OpenAIModel:   openaiModel,
 			OpenAIBaseURL: openaiURL,
 		}
 
-		time.AfterFunc(2*time.Second, func() {
+		server, err := bridge.New(client, options)
+
+		if err != nil {
+			return err
+		}
+
+		addr := fmt.Sprintf("localhost:%d", port)
+
+		time.AfterFunc(1*time.Second, func() {
 			cli.OpenURL(fmt.Sprintf("http://localhost:%d", port))
 		})
 
-		return dashboard.ListenAndServe(ctx, addr, client, options)
+		return server.ListenAndServe(ctx, addr)
 	},
 }

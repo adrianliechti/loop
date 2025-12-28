@@ -1,9 +1,10 @@
 module github.com/adrianliechti/loop
 
-go 1.25.0
+go 1.25.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/adrianliechti/bridge v0.0.1
 	github.com/adrianliechti/go-cli v0.0.9-0.20251224221129-e598926b8cc9
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/uuid v1.6.0
@@ -72,7 +73,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/urfave/cli/v3 v3.6.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
