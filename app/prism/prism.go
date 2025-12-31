@@ -1,4 +1,4 @@
-package bridge
+package prism
 
 import (
 	"context"
@@ -6,30 +6,22 @@ import (
 	"time"
 
 	"github.com/adrianliechti/go-cli"
-	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/bridge"
+	"github.com/adrianliechti/loop/pkg/prism"
 	"github.com/adrianliechti/loop/pkg/system"
 )
 
 var Command = &cli.Command{
-	Name:  "bridge",
-	Usage: "open Kubernetes dashboard",
-
-	Flags: []cli.Flag{
-		app.ScopeFlag,
-		app.NamespacesFlag,
-	},
+	Name:  "prism",
+	Usage: "run Prism API client",
 
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		client := app.MustClient(ctx, cmd)
-
-		port, err := system.FreePort(8888)
+		port, err := system.FreePort(9999)
 
 		if err != nil {
 			return err
 		}
 
-		srv, err := bridge.New(client, nil)
+		srv, err := prism.New()
 
 		if err != nil {
 			return err
@@ -39,7 +31,7 @@ var Command = &cli.Command{
 		addr := fmt.Sprintf("localhost:%d", port)
 
 		time.AfterFunc(500*time.Millisecond, func() {
-			cli.Infof("Bridge on %s", url)
+			cli.Infof("Prism on %s", url)
 			cli.OpenURL(url)
 		})
 

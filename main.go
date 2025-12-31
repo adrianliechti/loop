@@ -16,6 +16,7 @@ import (
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/docker"
 	"github.com/adrianliechti/loop/app/expose"
+	"github.com/adrianliechti/loop/app/prism"
 	"github.com/adrianliechti/loop/app/run"
 	"github.com/adrianliechti/loop/app/toolkit"
 
@@ -60,7 +61,9 @@ func initApp() cli.Command {
 			expose.Command,
 
 			run.Command,
+
 			code.Command,
+			prism.Command,
 			toolkit.Command,
 
 			build.Command,
