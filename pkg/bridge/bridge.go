@@ -7,7 +7,11 @@ import (
 )
 
 type Server = server.Server
-type PlatformConfig = config.PlatformConfig
+
+type PlatformConfig struct {
+	TenancyLabels      []string
+	PlatformNamespaces []string
+}
 
 func New(client kubernetes.Client, platform *PlatformConfig) (*Server, error) {
 	cfg, err := config.New()
@@ -16,7 +20,10 @@ func New(client kubernetes.Client, platform *PlatformConfig) (*Server, error) {
 		return nil, err
 	}
 
-	cfg.Platform = platform
+	if cfg.Kubernetes != nil && platform != nil {
+		cfg.Kubernetes.TenancyLabels = platform.TenancyLabels
+		cfg.Kubernetes.PlatformNamespaces = platform.PlatformNamespaces
+	}
 
 	return server.New(cfg)
 }
