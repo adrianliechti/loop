@@ -13,13 +13,21 @@ var KubeconfigFlag = &cli.StringFlag{
 }
 
 func Client(ctx context.Context, cmd *cli.Command) (kubernetes.Client, error) {
+	return ClientWithContext(ctx, cmd, "")
+}
+
+func ClientWithContext(ctx context.Context, cmd *cli.Command, context string) (kubernetes.Client, error) {
 	kubeconfig := cmd.String(KubeconfigFlag.Name)
 
-	return kubernetes.NewFromFile(kubeconfig)
+	return kubernetes.NewFromFile(kubeconfig, context)
 }
 
 func MustClient(ctx context.Context, cmd *cli.Command) kubernetes.Client {
-	client, err := Client(ctx, cmd)
+	return MustClientWithContext(ctx, cmd, "")
+}
+
+func MustClientWithContext(ctx context.Context, cmd *cli.Command, context string) kubernetes.Client {
+	client, err := ClientWithContext(ctx, cmd, context)
 
 	if err != nil {
 		cli.Fatal(err)

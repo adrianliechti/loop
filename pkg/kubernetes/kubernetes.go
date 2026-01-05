@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/Masterminds/semver/v3"
 
@@ -60,11 +61,18 @@ type Client interface {
 	CreateFileInPod(ctx context.Context, namespace, name, container, path string, data io.Reader) error
 }
 
-func New() (Client, error) {
-	return NewFromFile("")
+type Context struct {
+	Name string
+
+	Cluster   string
+	Namespace string
 }
 
-func NewFromFile(kubeconfig string) (Client, error) {
+func New() (Client, error) {
+	return NewFromFile("", "")
+}
+
+func NewFromFile(kubeconfig, context string) (Client, error) {
 	if kubeconfig == "" {
 		kubeconfig = ConfigPath()
 	}
@@ -75,29 +83,33 @@ func NewFromFile(kubeconfig string) (Client, error) {
 		return nil, err
 	}
 
-	return NewFromBytes(data)
+	return NewFromBytes(data, context)
 }
 
-func NewFromBytes(kubeconfig []byte) (Client, error) {
-	config, err := clientcmd.NewClientConfigFromBytes(kubeconfig)
+func NewFromBytes(kubeconfig []byte, context string) (Client, error) {
+	raw, err := clientcmd.Load(kubeconfig)
 
 	if err != nil {
 		return nil, err
 	}
 
-	c, err := config.ClientConfig()
+	config := clientcmd.NewDefaultClientConfig(*raw, &clientcmd.ConfigOverrides{
+		CurrentContext: context,
+	})
+
+	restConfig, err := config.ClientConfig()
 
 	if err != nil {
 		return nil, err
 	}
 
-	ns, _, _ := config.Namespace()
+	namespace, _, _ := config.Namespace()
 
-	if ns == "" {
-		ns = "default"
+	if namespace == "" {
+		namespace = "default"
 	}
 
-	return NewFromConfig(c, ns)
+	return NewFromConfig(restConfig, namespace)
 }
 
 func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
@@ -137,6 +149,45 @@ func NewFromConfig(config *rest.Config, namespace string) (Client, error) {
 	}
 
 	return client, nil
+}
+
+func ContextsFromFile(kubeconfig string) ([]Context, error) {
+	if kubeconfig == "" {
+		kubeconfig = ConfigPath()
+	}
+
+	data, err := os.ReadFile(kubeconfig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ContextsFromBytes(data)
+}
+
+func ContextsFromBytes(kubeconfig []byte) ([]Context, error) {
+	raw, err := clientcmd.Load(kubeconfig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	contexts := make([]Context, 0)
+
+	for name, c := range raw.Contexts {
+		contexts = append(contexts, Context{
+			Name: name,
+
+			Cluster:   c.Cluster,
+			Namespace: c.Namespace,
+		})
+	}
+
+	sort.Slice(contexts, func(i, j int) bool {
+		return contexts[i].Name < contexts[j].Name
+	})
+
+	return contexts, nil
 }
 
 type client struct {
