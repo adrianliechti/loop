@@ -4,9 +4,9 @@ go 1.25.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/adrianliechti/bridge v0.0.5
+	github.com/adrianliechti/bridge v0.0.6
 	github.com/adrianliechti/go-cli v0.0.10
-	github.com/adrianliechti/prism v0.0.2
+	github.com/adrianliechti/prism v0.0.3-0.20260104203344-c240c94c5d35
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/uuid v1.6.0
 	github.com/lmittmann/tint v1.1.2
@@ -53,6 +53,7 @@ require (
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -69,6 +70,7 @@ require (
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
@@ -85,6 +87,7 @@ require (
 	github.com/urfave/cli/v3 v3.6.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.47.0 // indirect

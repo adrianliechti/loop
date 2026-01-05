@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -213,6 +214,18 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 		ImagePullPolicy: corev1.PullAlways,
 
 		SecurityContext: &corev1.SecurityContext{},
+
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("200m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		},
 
 		VolumeMounts: []corev1.VolumeMount{
 			{
