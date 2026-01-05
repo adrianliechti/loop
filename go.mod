@@ -4,9 +4,9 @@ go 1.25.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/adrianliechti/bridge v0.0.6
+	github.com/adrianliechti/bridge v0.0.7
 	github.com/adrianliechti/go-cli v0.0.10
-	github.com/adrianliechti/prism v0.0.3-0.20260104203344-c240c94c5d35
+	github.com/adrianliechti/prism v0.0.4
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/uuid v1.6.0
 	github.com/lmittmann/tint v1.1.2

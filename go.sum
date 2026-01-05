@@ -6,12 +6,16 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/adrianliechti/bridge v0.0.6 h1:A8Oxhgk6e1MY+bvoCC7vouLTCrmqiFM4PHbWDR2+dsc=
 github.com/adrianliechti/bridge v0.0.6/go.mod h1:krYnbBkFdlzsWNvELmPNyzrpQhrhW5Wm/1hcerDpxMo=
+github.com/adrianliechti/bridge v0.0.7 h1:Ka8MLarAfZwYnMN8j2+hnmxzHaltBBAMsPjIdGUMA/E=
+github.com/adrianliechti/bridge v0.0.7/go.mod h1:krYnbBkFdlzsWNvELmPNyzrpQhrhW5Wm/1hcerDpxMo=
 github.com/adrianliechti/go-cli v0.0.10 h1:XA+voEb+S45DByt/ZnUrEwKn9lEtOEkwxA4QwYX5Rqk=
 github.com/adrianliechti/go-cli v0.0.10/go.mod h1:NfJnUAcdy4f+G8l9mKqQNb9xJBaX0PlcSq2NZkIVMYk=
 github.com/adrianliechti/prism v0.0.3-0.20260104203344-c240c94c5d35 h1:/g/DS0IGK0xIblRiUpkooxFIL+XpqEVAK5ecfmR/WoQ=
 github.com/adrianliechti/prism v0.0.3-0.20260104203344-c240c94c5d35/go.mod h1:P9b20ME3YN7Qp2pauZM8/6yiijTvG2BQrFiQ4MOuHbQ=
 github.com/adrianliechti/prism v0.0.3 h1:w1zZA6+UHhugNq9GvgidCDQ18qANnCBsWi08sPPNw9E=
 github.com/adrianliechti/prism v0.0.3/go.mod h1:P9b20ME3YN7Qp2pauZM8/6yiijTvG2BQrFiQ4MOuHbQ=
+github.com/adrianliechti/prism v0.0.4 h1:j5IXVooH54lQcAnYOeUD7+MPBfkaegHe2Lt+fI3kNfA=
+github.com/adrianliechti/prism v0.0.4/go.mod h1:P9b20ME3YN7Qp2pauZM8/6yiijTvG2BQrFiQ4MOuHbQ=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
