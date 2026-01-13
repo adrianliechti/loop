@@ -69,7 +69,7 @@ func (s *HostsSection) Flush() error {
 	sectionStart := strings.Index(text, headerStart)
 	sectionEnd := strings.LastIndex(text, headerEnd)
 
-	if sectionStart > 0 && sectionEnd > 0 {
+	if sectionStart >= 0 && sectionEnd >= 0 && sectionEnd > sectionStart {
 		text = text[:sectionStart] + text[sectionEnd+len(headerEnd):]
 	}
 
@@ -90,7 +90,8 @@ func (s *HostsSection) Flush() error {
 
 	text = strings.TrimRight(text, ln) + ln
 
-	lockedfile.Write(s.path, strings.NewReader(text), 0644)
-
+	if err := lockedfile.Write(s.path, strings.NewReader(text), 0644); err != nil {
+		return err
+	}
 	return nil
 }
