@@ -191,6 +191,11 @@ func (c *Gateway) Refresh(ctx context.Context) error {
 
 	c.tunnels = tunnels
 
+	// Do not flush if context is cancelled - let defer cleanup handle it
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	if err := c.hosts.Flush(); err != nil {
 		return err
 	}

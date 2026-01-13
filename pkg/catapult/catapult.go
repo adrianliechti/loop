@@ -67,11 +67,9 @@ func New(client kubernetes.Client, options CatapultOptions) (*Catapult, error) {
 func (c *Catapult) Start(ctx context.Context) error {
 	c.hosts.Clear()
 	c.hosts.Flush()
-
 	defer func() {
 		c.hosts.Clear()
 		c.hosts.Flush()
-
 		for _, t := range c.tunnels {
 			t.Stop()
 		}
@@ -172,6 +170,11 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 	}
 
 	c.tunnels = tunnels
+
+	// Do not flush if context is cancelled - let defer cleanup handle it
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 
 	if err := c.hosts.Flush(); err != nil {
 		return err
