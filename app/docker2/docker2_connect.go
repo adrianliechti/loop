@@ -9,7 +9,6 @@ import (
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/pkg/remote"
 	"github.com/adrianliechti/loop/pkg/remote/docker"
 )
 
@@ -77,7 +76,7 @@ var CommandConnect = &cli.Command{
 		}
 
 		if len(volumes) > 0 {
-			options.SyncMode = remote.SyncModeMount
+			options.SyncMode = docker.SyncModeMount
 		}
 
 		if err := docker.Connect(ctx, client, name, options); err != nil {
@@ -88,8 +87,8 @@ var CommandConnect = &cli.Command{
 	},
 }
 
-func mustParsePorts(ports []string) []remote.Port {
-	var result []remote.Port
+func mustParsePorts(ports []string) []docker.Port {
+	var result []docker.Port
 
 	for _, v := range ports {
 		parts := strings.Split(v, ":")
@@ -105,7 +104,7 @@ func mustParsePorts(ports []string) []remote.Port {
 			panic("invalid port forward")
 		}
 
-		result = append(result, remote.Port{
+		result = append(result, docker.Port{
 			Source: source,
 			Target: target,
 		})
@@ -114,8 +113,8 @@ func mustParsePorts(ports []string) []remote.Port {
 	return result
 }
 
-func mustParseVolumes(volumes []string) []remote.Volume {
-	var result []remote.Volume
+func mustParseVolumes(volumes []string) []docker.Volume {
+	var result []docker.Volume
 
 	for _, v := range volumes {
 		parts := strings.Split(v, ":")
@@ -137,7 +136,7 @@ func mustParseVolumes(volumes []string) []remote.Volume {
 			panic("invalid volume mount")
 		}
 
-		result = append(result, remote.Volume{
+		result = append(result, docker.Volume{
 			Source: source,
 			Target: target,
 		})

@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,10 +44,6 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 		options.Port = port
 	}
 
-	if options.SyncMode == SyncModeMount && len(options.Volumes) > 1 {
-		return errors.New("mount mode currently only supports a single volume")
-	}
-
 	cli.Infof("★ Connecting to Docker instance '%s'", name)
 
 	podName := resourceName(name) + "-0"
@@ -85,28 +80,39 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 
 	// Tunnel additional user ports through SSH
 	for _, p := range options.Ports {
+		cli.Infof("★ Forwarding port %d -> %d", p.Source, p.Target)
 		sshOptions = append(sshOptions, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: p.Source, RemotePort: p.Target}))
 	}
 
 	// Mount volumes through SFTP
 	if len(options.Volumes) > 0 && options.SyncMode == SyncModeMount {
-		volume := options.Volumes[0]
+		var mountCommands []string
 
-		sftpPort, err := system.FreePort(0)
+		for i, volume := range options.Volumes {
+			cli.Infof("★ Mounting volume %s -> %s", volume.Source, volume.Target)
 
-		if err != nil {
-			return err
+			sftpPort, err := system.FreePort(0)
+
+			if err != nil {
+				return err
+			}
+
+			if err := startServer(ctx, sftpPort, volume.Source); err != nil {
+				return err
+			}
+
+			remotePort := 2222 + i
+			targetPath := path.Join("/data", volume.Target)
+
+			sshOptions = append(sshOptions,
+				ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: remotePort}),
+			)
+
+			mountCommands = append(mountCommands, fmt.Sprintf("sshfs -o allow_other -p %d root@localhost:/ %s", remotePort, targetPath))
 		}
-
-		if err := startServer(ctx, sftpPort, volume.Source); err != nil {
-			return err
-		}
-
-		targetPath := path.Join("/data", volume.Target)
 
 		sshOptions = append(sshOptions,
-			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
-			ssh.WithCommand("sshfs -o allow_other -p 2222 root@localhost:/ "+targetPath+" && /bin/sleep infinity"),
+			ssh.WithCommand(strings.Join(mountCommands, " && ")+" && /bin/sleep infinity"),
 			ssh.WithStderr(os.Stderr),
 			ssh.WithStdout(os.Stdout),
 		)
