@@ -112,6 +112,18 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 								Privileged: kubernetes.Ptr(true),
 							},
 
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    options.CPU,
+									corev1.ResourceMemory: options.Memory,
+								},
+
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    options.CPU,
+									corev1.ResourceMemory: options.Memory,
+								},
+							},
+
 							Env: []corev1.EnvVar{
 								{
 									Name:  "DOCKER_HOST",
