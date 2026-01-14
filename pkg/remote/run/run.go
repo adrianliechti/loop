@@ -70,7 +70,7 @@ type RunOptions struct {
 
 	SyncMode SyncMode
 
-	OnPod    func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnCreate func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnReady  func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnDelete func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 }
@@ -101,29 +101,29 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 
 	pod := templatePod(container, options)
 
-	if options.OnPod != nil {
-		if err := options.OnPod(ctx, client, pod); err != nil {
+	if options.OnCreate != nil {
+		if err := options.OnCreate(ctx, client, pod); err != nil {
 			return err
 		}
 	}
 
-	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
+	cli.Infof("★ Creating container (%s/%s)...", pod.Namespace, pod.Name)
 
 	defer func() {
-		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
-		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+		cli.Infof("★ Removing container (%s/%s)...", pod.Namespace, pod.Name)
+		deletePod(context.Background(), client, pod.Namespace, pod.Name)
 
 		if options.OnDelete != nil {
 			options.OnDelete(ctx, client, pod)
 		}
 	}()
 
-	if err := startPod(ctx, client, pod); err != nil {
+	if err := createPod(ctx, client, pod); err != nil {
 		return err
 	}
 
 	if options.SyncMode != SyncModeMount {
-		cli.Infof("★ copying volumes data...")
+		cli.Infof("★ Copying volumes data...")
 
 		if err := copyVolumes(ctx, client, pod.Namespace, pod.Name, container.Volumes); err != nil {
 			return err
@@ -246,7 +246,7 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 	return pod
 }
 
-func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
+func createPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
 	pod, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 
 	if err != nil {
@@ -260,7 +260,7 @@ func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) er
 	return nil
 }
 
-func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+func deletePod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
 	})
