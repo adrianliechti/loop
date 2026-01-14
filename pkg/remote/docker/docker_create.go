@@ -208,7 +208,7 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "docker",
+						Name: "data",
 					},
 
 					Spec: corev1.PersistentVolumeClaimSpec{
