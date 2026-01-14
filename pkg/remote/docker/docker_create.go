@@ -137,7 +137,7 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "docker",
+									Name:      "data",
 									MountPath: "/var/lib/docker",
 								},
 								{
