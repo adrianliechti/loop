@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"strings"
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sftp"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 )
@@ -86,32 +86,34 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 
 	// Mount volumes through SFTP
 	if len(options.Volumes) > 0 && options.SyncMode == SyncModeMount {
+		var mounts []sftp.Mount
 		var mountCommands []string
 
-		for i, volume := range options.Volumes {
-			cli.Infof("★ Mounting volume %s -> %s", volume.Source, volume.Target)
+		for _, volume := range options.Volumes {
+			targetPath := "/data" + volume.Target
 
-			sftpPort, err := system.FreePort(0)
+			cli.Infof("★ Mounting volume %s -> %s", volume.Source, targetPath)
 
-			if err != nil {
-				return err
-			}
+			mounts = append(mounts, sftp.Mount{
+				Source: volume.Source,
+				Target: volume.Target,
+			})
 
-			if err := startServer(ctx, sftpPort, volume.Source); err != nil {
-				return err
-			}
+			mountCommands = append(mountCommands, fmt.Sprintf("mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s", targetPath, volume.Target, targetPath))
+		}
 
-			remotePort := 2222 + i
-			targetPath := path.Join("/data", volume.Target)
+		sftpPort, err := system.FreePort(0)
 
-			sshOptions = append(sshOptions,
-				ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: remotePort}),
-			)
+		if err != nil {
+			return err
+		}
 
-			mountCommands = append(mountCommands, fmt.Sprintf("sshfs -o allow_other -p %d root@localhost:/ %s", remotePort, targetPath))
+		if err := startServer(ctx, sftpPort, mounts); err != nil {
+			return err
 		}
 
 		sshOptions = append(sshOptions,
+			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
 			ssh.WithCommand(strings.Join(mountCommands, " && ")+" && /bin/sleep infinity"),
 			ssh.WithStderr(os.Stderr),
 			ssh.WithStdout(os.Stdout),

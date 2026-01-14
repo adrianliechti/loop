@@ -2,7 +2,6 @@ package run
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sftp"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 
@@ -93,10 +93,6 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 
 	if options.Image == "" {
 		options.Image = "ghcr.io/adrianliechti/loop-tunnel"
-	}
-
-	if options.SyncMode == SyncModeMount && len(container.Volumes) > 1 {
-		return errors.New("mount mode currently only supports a single volume")
 	}
 
 	pod := templatePod(container, options)
@@ -298,29 +294,40 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 	}
 
 	if len(container.Volumes) > 0 && options.SyncMode == SyncModeMount {
-		volume := container.Volumes[0]
+		var mounts []sftp.Mount
+		var mountCommands []string
 
-		sftpport, err := system.FreePort(0)
+		for _, volume := range container.Volumes {
+			targetPath := "/data" + volume.Target
+
+			mounts = append(mounts, sftp.Mount{
+				Source: volume.Source,
+				Target: volume.Target,
+			})
+
+			mountCommands = append(mountCommands, fmt.Sprintf("mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s", targetPath, volume.Target, targetPath))
+		}
+
+		sftpPort, err := system.FreePort(0)
 
 		if err != nil {
 			return err
 		}
 
-		if err := startServer(ctx, sftpport, volume.Source); err != nil {
+		if err := startServer(ctx, sftpPort, mounts); err != nil {
 			return err
 		}
 
-		targetPath := path.Join("/data", volume.Target)
+		var sshOptions []ssh.Option
 
-		options := []ssh.Option{
-			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpport, RemotePort: 2222}),
-			ssh.WithCommand("sshfs -o allow_other -p 2222 root@localhost:/ " + targetPath + " && /bin/sleep infinity"),
-
+		sshOptions = append(sshOptions,
+			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
+			ssh.WithCommand(strings.Join(mountCommands, " && ")+" && /bin/sleep infinity"),
 			ssh.WithStderr(os.Stderr),
 			ssh.WithStdout(os.Stdout),
-		}
+		)
 
-		c := ssh.New(addr, options...)
+		c := ssh.New(addr, sshOptions...)
 
 		go func() {
 			if err := c.Run(ctx); err != nil {

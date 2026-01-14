@@ -1,4 +1,4 @@
-package docker2
+package docker
 
 import (
 	"context"

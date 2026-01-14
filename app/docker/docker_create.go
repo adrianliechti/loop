@@ -1,4 +1,4 @@
-package docker2
+package docker
 
 import (
 	"context"
@@ -19,11 +19,6 @@ var CommandCreate = &cli.Command{
 	Usage: "create a new Docker instance",
 
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:  "name",
-			Usage: "daemon name",
-		},
-
 		&cli.StringFlag{
 			Name:  "cpu",
 			Usage: "cpu resources",
@@ -46,7 +41,7 @@ var CommandCreate = &cli.Command{
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 
-		name := cmd.String("name")
+		name := cmd.Args().Get(0)
 		namespace := app.Namespace(ctx, cmd)
 
 		if name == "" {

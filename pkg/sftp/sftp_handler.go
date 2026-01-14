@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -25,12 +26,22 @@ var (
 )
 
 type handler struct {
-	root string
+	root   string
+	mounts []Mount
 }
 
 func (h *handler) toLocalPath(path string) string {
 	path = filepath.FromSlash(path)
 	path = filepath.Clean(path)
+
+	// Check mounts first (mounts override root)
+	for _, m := range h.mounts {
+		target := filepath.Clean(m.Target)
+		if path == target || strings.HasPrefix(path, target+string(filepath.Separator)) {
+			rel := strings.TrimPrefix(path, target)
+			return filepath.Join(m.Source, rel)
+		}
+	}
 
 	return filepath.Join(h.root, path)
 }

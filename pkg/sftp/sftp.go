@@ -10,16 +10,22 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type Mount struct {
+	Source string
+	Target string
+}
+
 type Server struct {
-	addr string
-	root string
+	addr   string
+	root   string
+	mounts []Mount
 
 	config *ssh.ServerConfig
 
 	listener net.Listener
 }
 
-func NewServer(addr, root string) (*Server, error) {
+func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			return nil, nil
@@ -35,8 +41,9 @@ func NewServer(addr, root string) (*Server, error) {
 	config.AddHostKey(signer)
 
 	return &Server{
-		addr: addr,
-		root: root,
+		addr:   addr,
+		root:   root,
+		mounts: mounts,
 
 		config: config,
 	}, nil
@@ -105,7 +112,7 @@ func (s *Server) HandleConn(c net.Conn) error {
 			}
 		}(requests)
 
-		server := NewRequestServer(channel, s.root)
+		server := NewRequestServer(channel, s.root, s.mounts...)
 
 		if err := server.Serve(); err != nil {
 			return err
@@ -128,13 +135,14 @@ func generateSigner() (ssh.Signer, error) {
 }
 
 type RequestServer struct {
-	root string
+	root   string
+	mounts []Mount
 
 	server *sftp.RequestServer
 }
 
-func NewRequestServer(session io.ReadWriteCloser, root string) *RequestServer {
-	handler := &handler{root}
+func NewRequestServer(session io.ReadWriteCloser, root string, mounts ...Mount) *RequestServer {
+	handler := &handler{root: root, mounts: mounts}
 
 	s := sftp.NewRequestServer(session, sftp.Handlers{
 		FileGet:  handler,
@@ -144,7 +152,8 @@ func NewRequestServer(session io.ReadWriteCloser, root string) *RequestServer {
 	})
 
 	return &RequestServer{
-		root: root,
+		root:   root,
+		mounts: mounts,
 
 		server: s,
 	}

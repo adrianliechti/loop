@@ -15,7 +15,6 @@ import (
 	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/docker"
-	"github.com/adrianliechti/loop/app/docker2"
 	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/prism"
 	"github.com/adrianliechti/loop/app/run"
@@ -69,7 +68,6 @@ func initApp() cli.Command {
 
 			build.Command,
 			docker.Command,
-			docker2.Command,
 		},
 	}
 }

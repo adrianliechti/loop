@@ -1,4 +1,4 @@
-package docker2
+package docker
 
 import (
 	"context"
@@ -36,7 +36,7 @@ var CommandConnect = &cli.Command{
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 
-		name := cmd.String("name")
+		name := cmd.Args().Get(0)
 		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {

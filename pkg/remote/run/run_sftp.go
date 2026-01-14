@@ -8,8 +8,8 @@ import (
 	"github.com/adrianliechti/loop/pkg/sftp"
 )
 
-func startServer(ctx context.Context, port int, path string) error {
-	s, err := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
+func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
+	s, err := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), "/", mounts...)
 
 	if err != nil {
 		return err

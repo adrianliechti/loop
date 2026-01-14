@@ -45,7 +45,7 @@ func Create(ctx context.Context, client kubernetes.Client, options *CreateOption
 	}
 
 	if options.Image == "" {
-		options.Image = "public.ecr.aws/docker/library/docker:29-dind-rootless"
+		options.Image = "public.ecr.aws/docker/library/docker:29-dind"
 	}
 
 	if options.TunnelImage == "" {
@@ -145,6 +145,11 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 									MountPath: "/lib/modules",
 									ReadOnly:  true,
 								},
+								{
+									Name:             "loop-data",
+									MountPath:        "/data",
+									MountPropagation: kubernetes.Ptr(corev1.MountPropagationHostToContainer),
+								},
 							},
 						},
 						{
@@ -171,7 +176,7 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:             "docker",
+									Name:             "loop-data",
 									MountPath:        "/data",
 									MountPropagation: kubernetes.Ptr(corev1.MountPropagationBidirectional),
 								},
@@ -186,6 +191,12 @@ func templateStatefulSet(options *CreateOptions) *appsv1.StatefulSet {
 								HostPath: &corev1.HostPathVolumeSource{
 									Path: "/lib/modules",
 								},
+							},
+						},
+						{
+							Name: "loop-data",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},
