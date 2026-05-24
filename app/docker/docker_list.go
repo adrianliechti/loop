@@ -12,6 +12,10 @@ var CommandList = &cli.Command{
 	Name:  "list",
 	Usage: "list Docker instances",
 
+	Flags: []cli.Flag{
+		app.NamespaceFlag,
+	},
+
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 

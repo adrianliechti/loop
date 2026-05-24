@@ -19,6 +19,8 @@ var CommandCreate = &cli.Command{
 	Usage: "create a new Docker instance",
 
 	Flags: []cli.Flag{
+		app.NamespaceFlag,
+
 		&cli.StringFlag{
 			Name:  "cpu",
 			Usage: "cpu resources",
@@ -57,7 +59,7 @@ var CommandCreate = &cli.Command{
 		storageSize := resource.MustParse(cmd.String("storage"))
 
 		if _, err := client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-			return fmt.Errorf("Docker instance '%s' already exists", name)
+			return fmt.Errorf("docker instance %q already exists", name)
 		}
 
 		return docker.Create(ctx, client, &docker.CreateOptions{

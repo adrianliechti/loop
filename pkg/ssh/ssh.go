@@ -175,7 +175,24 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	if c.command != "" {
-		return session.Run(c.command)
+		if err := session.Start(c.command); err != nil {
+			return err
+		}
+
+		done := make(chan error, 1)
+
+		go func() {
+			done <- session.Wait()
+		}()
+
+		select {
+		case err := <-done:
+			return err
+		case <-ctx.Done():
+			session.Close()
+			client.Close()
+			return ctx.Err()
+		}
 	}
 
 	<-ctx.Done()

@@ -13,6 +13,10 @@ var CommandDelete = &cli.Command{
 	Name:  "delete",
 	Usage: "delete a Docker instance",
 
+	Flags: []cli.Flag{
+		app.NamespaceFlag,
+	},
+
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 

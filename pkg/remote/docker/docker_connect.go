@@ -3,26 +3,21 @@ package docker
 import (
 	"context"
 	"fmt"
-	"os"
+	"net"
+	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/adrianliechti/go-cli"
+	"github.com/adrianliechti/loop/pkg/dockerproxy"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
-	"github.com/adrianliechti/loop/pkg/sftp"
+	"github.com/adrianliechti/loop/pkg/remotemount"
 	"github.com/adrianliechti/loop/pkg/ssh"
-	"github.com/adrianliechti/loop/pkg/system"
 )
 
 type ConnectOptions struct {
 	Namespace string
-
-	Port int
-
-	SyncMode SyncMode
-
-	Ports   []Port
-	Volumes []Volume
 }
 
 func Connect(ctx context.Context, client kubernetes.Client, name string, options *ConnectOptions) error {
@@ -32,16 +27,6 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 
 	if options.Namespace == "" {
 		options.Namespace = client.Namespace()
-	}
-
-	if options.Port == 0 {
-		port, err := system.FreePort(2375)
-
-		if err != nil {
-			return err
-		}
-
-		options.Port = port
 	}
 
 	cli.Infof("★ Connecting to Docker instance '%s'", name)
@@ -55,105 +40,229 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Port forward to SSH on the tunnel container
-	sshPort, err := system.FreePort(0)
+	ports, releasePorts, err := reserveLocalPorts(2375, 0, 0)
 
 	if err != nil {
 		return err
 	}
 
-	sshReady := make(chan struct{})
+	proxyPort := ports[0]
+	daemonPort := ports[1]
+	sshPort := ports[2]
+	defer releasePorts()
+
+	releasePorts()
+
+	sshForwardReady := make(chan struct{})
+	sshForwardDone := make(chan error, 1)
 
 	go func() {
-		client.PodPortForward(ctx, options.Namespace, podName, "", map[int]int{sshPort: 22}, sshReady)
+		sshForwardDone <- client.PodPortForward(ctx, options.Namespace, podName, "127.0.0.1", map[int]int{sshPort: 22}, sshForwardReady)
 		cancel()
 	}()
 
-	<-sshReady
+	if err := waitForReady(ctx, sshForwardReady, sshForwardDone); err != nil {
+		return err
+	}
 
 	sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
+	daemonReady := make(chan struct{})
+	daemonDone := make(chan error, 1)
 
-	// Tunnel Docker port through SSH
-	sshOptions := []ssh.Option{
-		ssh.WithLocalPortForward(ssh.PortForward{LocalPort: options.Port, RemotePort: 2375}),
+	go func() {
+		sshClient := ssh.New(sshAddr,
+			ssh.WithLocalPortForward(ssh.PortForward{LocalPort: daemonPort, RemotePort: 2375}),
+			ssh.WithReady(daemonReady),
+		)
+
+		daemonDone <- sshClient.Run(ctx)
+		cancel()
+	}()
+
+	if err := waitForReady(ctx, daemonReady, daemonDone); err != nil {
+		return err
 	}
 
-	// Tunnel additional user ports through SSH
-	for _, p := range options.Ports {
-		cli.Infof("★ Forwarding port %d -> %d", p.Source, p.Target)
-		sshOptions = append(sshOptions, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: p.Source, RemotePort: p.Target}))
+	if err := waitForDocker(ctx, daemonPort); err != nil {
+		return err
 	}
 
-	// Mount volumes through SFTP
-	if len(options.Volumes) > 0 && options.SyncMode == SyncModeMount {
-		var mounts []sftp.Mount
-		var mountCommands []string
+	mounts := remotemount.NewManager(ctx, sshAddr, "/data")
+	defer mounts.Close()
 
-		for _, volume := range options.Volumes {
-			targetPath := "/data" + volume.Target
+	proxyReady := make(chan struct{})
+	proxyDone := make(chan error, 1)
 
-			cli.Infof("★ Mounting volume %s -> %s", volume.Source, targetPath)
+	go func() {
+		proxyDone <- dockerproxy.Serve(ctx, fmt.Sprintf("127.0.0.1:%d", proxyPort), fmt.Sprintf("http://127.0.0.1:%d", daemonPort), mounts, proxyReady)
+		cancel()
+	}()
 
-			mounts = append(mounts, sftp.Mount{
-				Source: volume.Source,
-				Target: volume.Target,
-			})
+	if err := waitForReady(ctx, proxyReady, proxyDone); err != nil {
+		return err
+	}
 
-			mountCommands = append(mountCommands, fmt.Sprintf("mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s", targetPath, volume.Target, targetPath))
+	docker := "docker"
+	loopContext := "loop-" + name
+
+	val, err := exec.Command(docker, "context", "show").Output()
+
+	if err != nil {
+		return fmt.Errorf("could not get current Docker context: %w", err)
+	}
+
+	currentContext := strings.TrimSpace(string(val))
+
+	defer func() {
+		cli.Info("★ Resetting Docker context to '" + currentContext + "'")
+
+		if currentContext != loopContext {
+			runDocker(docker, "context", "use", currentContext)
+		} else {
+			runDocker(docker, "context", "use", "default")
 		}
 
-		sftpPort, err := system.FreePort(0)
+		runDocker(docker, "context", "rm", "-f", loopContext)
+	}()
+
+	cli.Info("★ Setting Docker context to '" + loopContext + "'")
+
+	if currentContext == loopContext {
+		runDocker(docker, "context", "use", "default")
+	}
+
+	runDocker(docker, "context", "rm", "-f", loopContext)
+
+	if err := runDocker(docker, "context", "create", loopContext, "--docker", fmt.Sprintf("host=tcp://127.0.0.1:%d", proxyPort)); err != nil {
+		return err
+	}
+
+	if err := runDocker(docker, "context", "use", loopContext); err != nil {
+		return err
+	}
+
+	cli.Info("★ Press Ctrl+C to disconnect")
+
+	select {
+	case err := <-sshForwardDone:
+		return errOrContext(ctx, err)
+	case err := <-daemonDone:
+		return errOrContext(ctx, err)
+	case err := <-proxyDone:
+		return errOrContext(ctx, err)
+	case <-ctx.Done():
+		return nil
+	}
+}
+
+func reserveLocalPorts(preferences ...int) ([]int, func(), error) {
+	listeners := make([]net.Listener, 0, len(preferences))
+	closed := false
+
+	cleanup := func() {
+		if closed {
+			return
+		}
+
+		closed = true
+
+		for _, listener := range listeners {
+			listener.Close()
+		}
+	}
+
+	for _, preference := range preferences {
+		listener, err := reserveLocalPort(preference)
+
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+
+		listeners = append(listeners, listener)
+	}
+
+	ports := make([]int, 0, len(listeners))
+
+	for _, listener := range listeners {
+		ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
+	}
+
+	return ports, cleanup, nil
+}
+
+func reserveLocalPort(preference int) (net.Listener, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preference))
+
+	if err == nil || preference == 0 {
+		return listener, err
+	}
+
+	return net.Listen("tcp", "127.0.0.1:0")
+}
+
+func waitForReady(ctx context.Context, ready <-chan struct{}, done <-chan error) error {
+	select {
+	case <-ready:
+		return nil
+	case err := <-done:
+		return errOrContext(ctx, err)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func errOrContext(ctx context.Context, err error) error {
+	if err != nil {
+		return err
+	}
+
+	return ctx.Err()
+}
+
+func waitForDocker(ctx context.Context, port int) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	client := &http.Client{
+		Timeout: 500 * time.Millisecond,
+	}
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/_ping", port)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
 		if err != nil {
 			return err
 		}
 
-		if err := startServer(ctx, sftpPort, mounts); err != nil {
-			return err
+		resp, err := client.Do(req)
+
+		if err == nil {
+			resp.Body.Close()
+
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			}
 		}
 
-		sshOptions = append(sshOptions,
-			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
-			ssh.WithCommand(strings.Join(mountCommands, " && ")+" && /bin/sleep infinity"),
-			ssh.WithStderr(os.Stderr),
-			ssh.WithStdout(os.Stdout),
-		)
-	}
-
-	go func() {
-		sshClient := ssh.New(sshAddr, sshOptions...)
-
-		if err := sshClient.Run(ctx); err != nil {
-			cli.Error(err)
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for Docker daemon: %w", ctx.Err())
 		}
-
-		cancel()
-	}()
-
-	// Setup Docker context
-	docker := "docker"
-	loopContext := "loop-" + name
-	currentContext := "default"
-
-	if val, err := exec.Command(docker, "context", "show").Output(); err == nil {
-		currentContext = strings.TrimRight(string(val), "\n")
 	}
+}
 
-	defer func() {
-		cli.Info("★ Resetting Docker context to '" + currentContext + "'")
-		exec.Command(docker, "context", "use", currentContext).Run()
-		exec.Command(docker, "context", "rm", loopContext).Run()
-	}()
+func runDocker(docker string, args ...string) error {
+	cmd := exec.Command(docker, args...)
 
-	cli.Info("★ Setting Docker context to '" + loopContext + "'")
-	exec.Command(docker, "context", "rm", loopContext).Run()
-	exec.Command(docker, "context", "create", loopContext, "--docker", fmt.Sprintf("host=tcp://127.0.0.1:%d", options.Port)).Run()
-	exec.Command(docker, "context", "use", loopContext).Run()
-
-	cli.Info("★ Press Ctrl+C to disconnect")
-
-	// Wait for context cancellation
-	<-ctx.Done()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
 
 	return nil
 }
