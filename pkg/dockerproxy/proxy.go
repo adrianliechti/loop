@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -42,7 +43,7 @@ func Serve(ctx context.Context, addr, target string, resolver Resolver, ready ch
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isContainerCreate(r.URL.Path) {
+		if r.Method == http.MethodPost && isContainerCreate(r.URL.Path) {
 			if err := rewriteCreateRequest(r, resolver); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -71,7 +72,31 @@ func Serve(ctx context.Context, addr, target string, resolver Resolver, ready ch
 func isContainerCreate(p string) bool {
 	p = path.Clean("/" + strings.TrimPrefix(p, "/"))
 
-	return p == "/containers/create" || strings.HasSuffix(p, "/containers/create")
+	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
+
+	if len(parts) == 2 {
+		return parts[0] == "containers" && parts[1] == "create"
+	}
+
+	if len(parts) == 3 {
+		return isAPIVersion(parts[0]) && parts[1] == "containers" && parts[2] == "create"
+	}
+
+	return false
+}
+
+func isAPIVersion(part string) bool {
+	if len(part) < 2 || part[0] != 'v' {
+		return false
+	}
+
+	for _, r := range part[1:] {
+		if (r < '0' || r > '9') && r != '.' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func rewriteCreateRequest(r *http.Request, resolver Resolver) error {
@@ -91,7 +116,7 @@ func rewriteCreateRequest(r *http.Request, resolver Resolver) error {
 
 	r.Body = io.NopCloser(bytes.NewReader(rewritten))
 	r.ContentLength = int64(len(rewritten))
-	r.Header.Set("Content-Length", fmt.Sprintf("%d", len(rewritten)))
+	r.Header.Set("Content-Length", strconv.Itoa(len(rewritten)))
 
 	return nil
 }
@@ -151,11 +176,11 @@ func rewriteBinds(ctx context.Context, hostConfig map[string]any, resolver Resol
 
 		source, rest, ok := splitBind(bind)
 
-		if !ok || !isLocalBindSource(source) {
+		if !ok || !isLocalVolumeSource(source) {
 			continue
 		}
 
-		remote, err := resolver.Resolve(ctx, source)
+		remote, err := resolveSource(ctx, resolver, source)
 
 		if err != nil {
 			return err
@@ -196,11 +221,11 @@ func rewriteMounts(ctx context.Context, hostConfig map[string]any, resolver Reso
 
 		source, _ := mount["Source"].(string)
 
-		if !isLocalBindSource(source) {
+		if source == "" {
 			continue
 		}
 
-		remote, err := resolver.Resolve(ctx, source)
+		remote, err := resolveSource(ctx, resolver, source)
 
 		if err != nil {
 			return err
@@ -218,7 +243,19 @@ func splitBind(bind string) (string, string, bool) {
 		return "", "", false
 	}
 
-	idx := strings.Index(bind, ":")
+	start := 0
+
+	if hasWindowsDrivePrefix(bind) {
+		start = 2
+	}
+
+	idx := strings.Index(bind[start:], ":")
+
+	if idx < 0 {
+		return "", "", false
+	}
+
+	idx += start
 
 	if idx <= 0 {
 		return "", "", false
@@ -227,8 +264,42 @@ func splitBind(bind string) (string, string, bool) {
 	return bind[:idx], bind[idx:], true
 }
 
-func isLocalBindSource(source string) bool {
-	return strings.HasPrefix(source, "/")
+func isLocalVolumeSource(source string) bool {
+	return isAbsLocalPath(source) || strings.HasPrefix(source, ".")
+}
+
+func resolveSource(ctx context.Context, resolver Resolver, source string) (string, error) {
+	if !isAbsLocalPath(source) {
+		var err error
+
+		source, err = filepath.Abs(source)
+
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return resolver.Resolve(ctx, source)
+}
+
+func isAbsLocalPath(source string) bool {
+	return filepath.IsAbs(source) || strings.HasPrefix(source, "/") || hasWindowsDrivePrefix(source) || isWindowsUNCPath(source)
+}
+
+func hasWindowsDrivePrefix(source string) bool {
+	return len(source) >= 3 && isASCIILetter(source[0]) && source[1] == ':' && isPathSeparator(source[2])
+}
+
+func isWindowsUNCPath(source string) bool {
+	return len(source) >= 2 && isPathSeparator(source[0]) && isPathSeparator(source[1])
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+func isPathSeparator(b byte) bool {
+	return b == '/' || b == '\\'
 }
 
 func forwardPorts(ctx context.Context, hostConfig map[string]any, forwarder PortForwarder) error {
@@ -296,18 +367,10 @@ func parseContainerPort(port string) (int, bool) {
 }
 
 func parsePort(port string) (int, bool) {
-	if port == "" {
+	value, err := strconv.Atoi(port)
+
+	if err != nil {
 		return 0, false
-	}
-
-	var value int
-
-	for _, r := range port {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-
-		value = value*10 + int(r-'0')
 	}
 
 	return value, value > 0 && value <= 65535

@@ -180,12 +180,12 @@ func (s *Server) HandleConn(c net.Conn) error {
 		}(requests)
 
 		server := NewRequestServer(channel, s.root, s.mounts...)
+		err = server.Serve()
+		server.Close()
 
-		if err := server.Serve(); err != nil {
+		if err != nil {
 			return err
 		}
-
-		server.Close()
 	}
 
 	return nil

@@ -28,15 +28,14 @@ func Delete(ctx context.Context, client kubernetes.Client, namespace, name strin
 
 	var result error
 
+	// Pods are owned by the StatefulSet and deleted via cascade. PVCs are
+	// created from VolumeClaimTemplates but are *not* garbage-collected when
+	// the StatefulSet is deleted, so they need an explicit cleanup pass.
 	if err := client.AppsV1().StatefulSets(namespace).DeleteCollection(ctx, deleteOptions, listOptions); err != nil {
 		result = errors.Join(result, err)
 	}
 
 	if err := client.CoreV1().PersistentVolumeClaims(namespace).DeleteCollection(ctx, deleteOptions, listOptions); err != nil {
-		result = errors.Join(result, err)
-	}
-
-	if err := client.CoreV1().Pods(namespace).DeleteCollection(ctx, deleteOptions, listOptions); err != nil {
 		result = errors.Join(result, err)
 	}
 

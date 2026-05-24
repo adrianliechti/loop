@@ -15,7 +15,6 @@ var CommandConnect = &cli.Command{
 
 	Flags: []cli.Flag{
 		app.NamespaceFlag,
-		app.NameFlag,
 	},
 
 	Action: func(ctx context.Context, cmd *cli.Command) error {

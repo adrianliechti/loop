@@ -134,7 +134,13 @@ func (m *Manager) ForwardPort(ctx context.Context, localAddr string, localPort, 
 	)
 
 	go func() {
-		done <- client.Run(portCtx)
+		err := client.Run(portCtx)
+
+		m.mu.Lock()
+		delete(m.ports, key)
+		m.mu.Unlock()
+
+		done <- err
 	}()
 
 	select {

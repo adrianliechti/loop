@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/adrianliechti/go-cli"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var CommandCreate = &cli.Command{
@@ -57,10 +55,6 @@ var CommandCreate = &cli.Command{
 		resourceCPU := resource.MustParse(cmd.String("cpu"))
 		resourceMemory := resource.MustParse(cmd.String("memory"))
 		storageSize := resource.MustParse(cmd.String("storage"))
-
-		if _, err := client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-			return fmt.Errorf("docker instance %q already exists", name)
-		}
 
 		return docker.Create(ctx, client, &docker.CreateOptions{
 			Name:      name,

@@ -33,7 +33,7 @@ func List(ctx context.Context, client kubernetes.Client, options *ListOptions) (
 	var result []Daemon
 
 	for _, p := range pods.Items {
-		name := p.Labels["loop.cluster.local/docker"]
+		name := p.Labels[resourceLabelSelector]
 
 		if name == "" {
 			continue

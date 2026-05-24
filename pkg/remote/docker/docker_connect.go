@@ -40,18 +40,23 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ports, releasePorts, err := reserveLocalPorts(2375, 0, 0)
+	proxyPort, err := pickPort(2375)
 
 	if err != nil {
 		return err
 	}
 
-	proxyPort := ports[0]
-	daemonPort := ports[1]
-	sshPort := ports[2]
-	defer releasePorts()
+	daemonPort, err := pickPort(0)
 
-	releasePorts()
+	if err != nil {
+		return err
+	}
+
+	sshPort, err := pickPort(0)
+
+	if err != nil {
+		return err
+	}
 
 	sshForwardReady := make(chan struct{})
 	sshForwardDone := make(chan error, 1)
@@ -155,50 +160,23 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	}
 }
 
-func reserveLocalPorts(preferences ...int) ([]int, func(), error) {
-	listeners := make([]net.Listener, 0, len(preferences))
-	closed := false
-
-	cleanup := func() {
-		if closed {
-			return
-		}
-
-		closed = true
-
-		for _, listener := range listeners {
-			listener.Close()
-		}
-	}
-
-	for _, preference := range preferences {
-		listener, err := reserveLocalPort(preference)
-
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-
-		listeners = append(listeners, listener)
-	}
-
-	ports := make([]int, 0, len(listeners))
-
-	for _, listener := range listeners {
-		ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
-	}
-
-	return ports, cleanup, nil
-}
-
-func reserveLocalPort(preference int) (net.Listener, error) {
+// pickPort returns a free local TCP port, preferring `preference` if available.
+// There is an inherent TOCTOU window between picking and binding; callers must
+// tolerate the chosen port being claimed by another process before they bind.
+func pickPort(preference int) (int, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preference))
 
-	if err == nil || preference == 0 {
-		return listener, err
+	if err != nil && preference != 0 {
+		listener, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 
-	return net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+
+	defer listener.Close()
+
+	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 
 func waitForReady(ctx context.Context, ready <-chan struct{}, done <-chan error) error {

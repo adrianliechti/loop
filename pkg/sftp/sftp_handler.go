@@ -52,16 +52,16 @@ func (h *handler) resolve(p string) (*os.Root, string) {
 	name := toRelPath(p)
 
 	for _, mount := range h.mounts {
+		if mount.target == "." {
+			return mount.root, name
+		}
+
 		if name == mount.target {
 			return mount.root, "."
 		}
 
-		if mount.target != "." && strings.HasPrefix(name, mount.target+"/") {
-			return mount.root, strings.TrimPrefix(name, mount.target+"/")
-		}
-
-		if mount.target == "." {
-			return mount.root, name
+		if strings.HasPrefix(name, mount.target+"/") {
+			return mount.root, name[len(mount.target)+1:]
 		}
 	}
 

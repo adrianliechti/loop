@@ -416,7 +416,7 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 }
 
 // shellQuote single-quotes s for safe inclusion in a /bin/sh command line.
-// Single quotes inside s are escaped as '\”.
+// Single quotes inside s are escaped as '\''.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
