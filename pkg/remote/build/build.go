@@ -188,13 +188,19 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 
 	r, w := io.Pipe()
 
-	go func() {
-		defer w.Close()
+	// Closing the reader on exit unblocks WriteTarball if the consumer goes
+	// away early (e.g. the PodExec below fails); it then exits with
+	// ErrClosedPipe instead of leaking the goroutine.
+	defer r.Close()
 
-		docker.WriteTarball(w, dir, &docker.TarballOptions{
+	go func() {
+		err := docker.WriteTarball(w, dir, &docker.TarballOptions{
 			UID: &uid,
 			GID: &gid,
 		})
+		// Propagate write-side failures to the tar consumer so a partial
+		// archive becomes a hard error instead of a silently short stream.
+		w.CloseWithError(err)
 	}()
 
 	if err := client.PodExec(ctx, pod.Namespace, pod.Name, container, []string{"mkdir", "-p", builderPath}, false, nil, options.Stdout, options.Stderr); err != nil {
@@ -370,7 +376,11 @@ func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) er
 }
 
 func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
+	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
-	})
+	}); err != nil && !kubernetes.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }

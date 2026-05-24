@@ -8,6 +8,8 @@ github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAw
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/adrianliechti/bridge v0.0.9-0.20260119160531-938a22b7b557 h1:F63ZLaJepszZRy8oFKGNwakXyxDyjRWOPw2GLI8t3No=
 github.com/adrianliechti/bridge v0.0.9-0.20260119160531-938a22b7b557/go.mod h1:6KOOysbSXiWXJ3cbSltiQ1fLouBPMraJ0xCAq5zHGvY=
+github.com/adrianliechti/bridge v0.0.9 h1:psCMRK9gRqHgShXgYheZLQkE4uV+aqWvsre5F/ylc3k=
+github.com/adrianliechti/bridge v0.0.9/go.mod h1:CJUBOFAQAAdmRoqXzqq2CXf+VbOpNdkUEsqPCLqFSUU=
 github.com/adrianliechti/go-cli v0.0.11-0.20260119185129-a02590c71182 h1:LQZtb4kOrdPfi0xLQj6S6xyJsMa0XLef2lCo4uDeK30=
 github.com/adrianliechti/go-cli v0.0.11-0.20260119185129-a02590c71182/go.mod h1:BM+SlLtVrqL9MD0NE08zYYCYv4DqpzJyOpMG5MEC+iE=
 github.com/adrianliechti/go-cli v0.0.11 h1:W+he5DafU76aJlnYr7EjIjWXzxBLtnAIWTBY9rirMHg=
@@ -16,6 +18,8 @@ github.com/adrianliechti/go-cli v0.0.12 h1:QEeohfDteKFsvF+hKTzRLjOfAyS+FNjf1DOrw
 github.com/adrianliechti/go-cli v0.0.12/go.mod h1:bSCgUxu1kurmEcNg8sEQo2gAKVwIuiP9KosAntVdQYA=
 github.com/adrianliechti/prism v0.0.4 h1:j5IXVooH54lQcAnYOeUD7+MPBfkaegHe2Lt+fI3kNfA=
 github.com/adrianliechti/prism v0.0.4/go.mod h1:P9b20ME3YN7Qp2pauZM8/6yiijTvG2BQrFiQ4MOuHbQ=
+github.com/adrianliechti/prism v0.0.5 h1:nMhMBVE+soCTsc94WljNacr23vyIO7EViGLSLzrFEE0=
+github.com/adrianliechti/prism v0.0.5/go.mod h1:cdnAdklteAnY8Ggsq5amOJU3pxhVNWr/52WsbuTWJQg=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=

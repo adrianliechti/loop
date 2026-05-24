@@ -2,6 +2,7 @@ package expose
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/adrianliechti/go-cli"
@@ -62,10 +63,6 @@ func tunnelLabels(name string) map[string]string {
 	}
 }
 
-func tunnelSelector(name string) map[string]string {
-	return tunnelLabels(name)
-}
-
 type TunnelOptions struct {
 	ServiceType  corev1.ServiceType
 	ServicePorts map[int]int
@@ -77,7 +74,6 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 	}
 
 	labels := tunnelLabels(name)
-	selector := tunnelSelector(name)
 
 	cli.Infof("★ creating tunnel (%s/%s)...", namespace, name)
 
@@ -129,7 +125,7 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 
 		Spec: corev1.ServiceSpec{
 			Type:     options.ServiceType,
-			Selector: selector,
+			Selector: labels,
 		},
 	}
 
@@ -168,11 +164,23 @@ func createTunnel(ctx context.Context, client kubernetes.Client, namespace, name
 }
 
 func deleteTunnel(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	client.CoreV1().Pods(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	client.CoreV1().Services(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-	client.NetworkingV1().Ingresses(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	// Best-effort cleanup: attempt all deletes, ignore NotFound, return joined
+	// errors so a failure on one resource doesn't leave the others behind.
+	var errs []error
 
-	return nil
+	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kubernetes.IsNotFound(err) {
+		errs = append(errs, err)
+	}
+
+	if err := client.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kubernetes.IsNotFound(err) {
+		errs = append(errs, err)
+	}
+
+	if err := client.NetworkingV1().Ingresses(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kubernetes.IsNotFound(err) {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
 }
 
 func connectTunnel(ctx context.Context, client kubernetes.Client, namespace, name string, ports map[int]int, readyChan chan struct{}) error {

@@ -88,16 +88,25 @@ func Connect(ctx context.Context, client kubernetes.Client, namespaces []string,
 		return err
 	}
 
-	err1 := make(chan error)
-	err2 := make(chan error)
+	// Share a cancellable context so the first failure tears down the other
+	// side too; otherwise an early gateway error would block on the catapult
+	// goroutine until the user interrupts the whole command.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errs := make(chan error, 2)
 
 	go func() {
-		err1 <- catapult.Start(ctx)
+		errs <- catapult.Start(ctx)
 	}()
 
 	go func() {
-		err2 <- gateway.Start(ctx)
+		errs <- gateway.Start(ctx)
 	}()
 
-	return errors.Join(<-err1, <-err2)
+	first := <-errs
+	cancel()
+	second := <-errs
+
+	return errors.Join(first, second)
 }

@@ -5,7 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -24,15 +24,26 @@ var (
 	_ sftp.PosixRenameFileCmder = (*handler)(nil)
 )
 
+// handler routes every filesystem operation through *os.Root so that path
+// traversal and symlink-based escapes outside the configured root are
+// rejected by the kernel rather than relying on per-path validation.
 type handler struct {
-	root string
+	root *os.Root
 }
 
-func (h *handler) toLocalPath(path string) string {
-	path = filepath.FromSlash(path)
-	path = filepath.Clean(path)
+// toRelPath maps an SFTP-supplied (slash-separated) absolute-style path to a
+// path relative to handler's root. *os.Root methods require relative paths;
+// they also reject ".." components, but we Clean defensively in case clients
+// send unnormalized paths.
+func toRelPath(p string) string {
+	p = path.Clean("/" + p)
+	p = p[1:] // strip leading "/"
 
-	return filepath.Join(h.root, path)
+	if p == "" {
+		return "."
+	}
+
+	return p
 }
 
 const (
@@ -40,11 +51,6 @@ const (
 
 	methodList = "List"
 	methodStat = "Stat"
-	// methodLstat   = "Lstat"
-
-	// methodGet     = "Get"
-	// methodPut     = "Put"
-	// methodOpen    = "Open"
 
 	methodSetStat = "Setstat"
 	methodRename  = "Rename"
@@ -61,11 +67,19 @@ func (h *handler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	path := h.toLocalPath(r.Filepath)
+	name := toRelPath(r.Filepath)
 
 	switch r.Method {
 	case methodList:
-		entries, err := os.ReadDir(path)
+		dir, err := h.root.Open(name)
+
+		if err != nil {
+			return nil, err
+		}
+
+		defer dir.Close()
+
+		entries, err := dir.ReadDir(-1)
 
 		if err != nil {
 			return nil, err
@@ -86,7 +100,7 @@ func (h *handler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		return listerat(infos), nil
 
 	case methodStat:
-		info, err := os.Stat(path)
+		info, err := h.root.Stat(name)
 
 		if err != nil {
 			return nil, err
@@ -105,9 +119,7 @@ func (h *handler) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	path := h.toLocalPath(r.Filepath)
-
-	info, err := os.Lstat(path)
+	info, err := h.root.Lstat(toRelPath(r.Filepath))
 
 	if err != nil {
 		return nil, err
@@ -117,10 +129,8 @@ func (h *handler) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 }
 
 // Methods: Readlink
-func (h *handler) Readlink(path string) (string, error) {
-	path = h.toLocalPath(path)
-
-	return os.Readlink(path)
+func (h *handler) Readlink(p string) (string, error) {
+	return h.root.Readlink(toRelPath(p))
 }
 
 // Methods: Get
@@ -138,8 +148,6 @@ func (h *handler) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
 	if r.Filepath == "" {
 		return nil, os.ErrInvalid
 	}
-
-	path := h.toLocalPath(r.Filepath)
 
 	var flag int
 
@@ -169,7 +177,7 @@ func (h *handler) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
 		flag |= os.O_WRONLY
 	}
 
-	return os.OpenFile(path, flag, perm)
+	return h.root.OpenFile(toRelPath(r.Filepath), flag, perm)
 }
 
 // Methods: Setstat, Rmdir, Mkdir, Link, Symlink, Remove
@@ -178,10 +186,10 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 		return os.ErrInvalid
 	}
 
+	name := toRelPath(r.Filepath)
+
 	switch r.Method {
 	case methodSetStat:
-		path := h.toLocalPath(r.Filepath)
-
 		attrs := r.Attributes()
 		attrFlags := r.AttrFlags()
 
@@ -189,27 +197,25 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 			atime := time.Unix(int64(attrs.Atime), 0)
 			mtime := time.Unix(int64(attrs.Mtime), 0)
 
-			err := os.Chtimes(path, atime, mtime)
-			if err != nil {
+			if err := h.root.Chtimes(name, atime, mtime); err != nil {
 				return err
 			}
 		}
 
 		if attrFlags.Permissions {
-			err := os.Chmod(path, attrs.FileMode())
-			if err != nil {
+			if err := h.root.Chmod(name, attrs.FileMode()); err != nil {
 				return err
 			}
 		}
 
 		if attrFlags.UidGid {
-			if err := os.Chown(path, int(attrs.UID), int(attrs.GID)); err != nil {
+			if err := h.root.Chown(name, int(attrs.UID), int(attrs.GID)); err != nil {
 				return err
 			}
 		}
 
 		if attrFlags.Size {
-			if err := os.Truncate(path, int64(attrs.Size)); err != nil {
+			if err := h.truncate(name, int64(attrs.Size)); err != nil {
 				return err
 			}
 		}
@@ -220,9 +226,7 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 		return h.PosixRename(r)
 
 	case methodRmdir:
-		path := h.toLocalPath(r.Filepath)
-
-		info, err := os.Lstat(path)
+		info, err := h.root.Lstat(name)
 
 		if err != nil {
 			return err
@@ -232,37 +236,34 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 			return fmt.Errorf("%q is not a directory", r.Filepath)
 		}
 
-		return os.RemoveAll(path)
+		// SFTP rmdir semantics: only remove an empty directory. Recursing
+		// here (RemoveAll) would let a remote unlink wipe an entire local
+		// subtree in mount/sync mode.
+		return h.root.Remove(name)
 
 	case methodMkdir:
-		path := h.toLocalPath(r.Filepath)
-
-		return os.MkdirAll(path, perm)
+		return h.root.MkdirAll(name, perm)
 
 	case methodLink:
 		if r.Target == "" {
 			return os.ErrInvalid
 		}
 
-		oldname := h.toLocalPath(r.Filepath)
-		newname := h.toLocalPath(r.Target)
-
-		return os.Link(oldname, newname)
+		return h.root.Link(name, toRelPath(r.Target))
 
 	case methodSymlink:
 		if r.Target == "" {
 			return os.ErrInvalid
 		}
 
-		oldname := h.toLocalPath(r.Filepath)
-		newname := h.toLocalPath(r.Target)
-
-		return os.Symlink(oldname, newname)
+		// Per pkg/sftp convention: r.Filepath is the symlink *target* (the
+		// arbitrary string stored in the link), r.Target is the *linkpath*
+		// (where the symlink is created). The target is kept as-is — *os.Root
+		// rejects any traversal when the link is later resolved.
+		return h.root.Symlink(r.Filepath, toRelPath(r.Target))
 
 	case methodRemove:
-		path := h.toLocalPath(r.Filepath)
-
-		info, err := os.Lstat(path)
+		info, err := h.root.Lstat(name)
 
 		if err != nil {
 			return err
@@ -272,7 +273,7 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 			return fmt.Errorf("%q is a directory", r.Filepath)
 		}
 
-		return os.Remove(path)
+		return h.root.Remove(name)
 
 	default:
 		return sftp.ErrSSHFxOpUnsupported
@@ -281,18 +282,25 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 
 // Methods: Rename
 func (h *handler) PosixRename(r *sftp.Request) error {
-	if r.Filepath == "" {
+	if r.Filepath == "" || r.Target == "" {
 		return os.ErrInvalid
 	}
 
-	if r.Target == "" {
-		return os.ErrInvalid
+	return h.root.Rename(toRelPath(r.Filepath), toRelPath(r.Target))
+}
+
+// truncate sets a file's size via Open+Truncate since *os.Root has no direct
+// Truncate method.
+func (h *handler) truncate(name string, size int64) error {
+	f, err := h.root.OpenFile(name, os.O_WRONLY, 0)
+
+	if err != nil {
+		return err
 	}
 
-	oldname := h.toLocalPath(r.Filepath)
-	newname := h.toLocalPath(r.Target)
+	defer f.Close()
 
-	return os.Rename(oldname, newname)
+	return f.Truncate(size)
 }
 
 type listerat []os.FileInfo

@@ -98,12 +98,13 @@ func WriteTarball(w io.Writer, root string, options *TarballOptions) error {
 			return err
 		}
 
-		defer f.Close()
+		_, copyErr := io.Copy(t, f)
+		closeErr := f.Close()
 
-		if _, err := io.Copy(t, f); err != nil {
-			return err
+		if copyErr != nil {
+			return copyErr
 		}
 
-		return f.Close()
+		return closeErr
 	})
 }

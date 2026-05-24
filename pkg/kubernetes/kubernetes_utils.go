@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,47 +76,6 @@ func (c *client) ServiceAddress(ctx context.Context, namespace, name string) (st
 	return service.Spec.ClusterIP, nil
 }
 
-// func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
-// 	timeout := time.After(300 * time.Second)
-// 	ticker := time.NewTicker(5 * time.Second)
-
-// LOOP:
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return nil, errors.New("cancelled")
-// 		case <-timeout:
-// 			return nil, errors.New("timeout")
-// 		case <-ticker.C:
-// 			pod, err := c.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-
-// 			if err != nil {
-// 				continue
-// 			}
-
-// 			if pod.Status.Phase == corev1.PodFailed {
-// 				return pod, errors.New("pod failed")
-// 			}
-
-// 			if pod.Status.Phase == corev1.PodSucceeded {
-// 				return pod, errors.New("pod succeeded")
-// 			}
-
-// 			if pod.Status.Phase != corev1.PodRunning {
-// 				continue
-// 			}
-
-// 			for _, status := range pod.Status.ContainerStatuses {
-// 				if !status.Ready {
-// 					continue LOOP
-// 				}
-// 			}
-
-// 			return pod, nil
-// 		}
-// 	}
-// }
-
 func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
 	selector := fields.OneTermEqualSelector("metadata.name", name).String()
 
@@ -140,69 +100,58 @@ func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev
 	return ev.Object.(*corev1.Pod), nil
 }
 
+// terminalContainerWaitReasons are container Waiting reasons that won't
+// resolve on their own — surfacing them as errors avoids hanging WaitForPod
+// indefinitely on a pod that will never become ready.
+var terminalContainerWaitReasons = map[string]struct{}{
+	"ImagePullBackOff":           {},
+	"ErrImagePull":               {},
+	"InvalidImageName":           {},
+	"CreateContainerConfigError": {},
+	"CreateContainerError":       {},
+	"RunContainerError":          {},
+	"CrashLoopBackOff":           {},
+}
+
 func podReady(event watch.Event) (bool, error) {
-	switch event.Type {
-	case watch.Deleted:
+	if event.Type == watch.Deleted {
 		return false, errors.New("pod deleted")
 	}
-	switch t := event.Object.(type) {
-	case *corev1.Pod:
-		switch t.Status.Phase {
-		case corev1.PodFailed, corev1.PodSucceeded:
-			return false, errors.New("pod completed")
 
-		case corev1.PodRunning:
-			conditions := t.Status.Conditions
+	p, ok := event.Object.(*corev1.Pod)
 
-			if conditions == nil {
-				return false, nil
-			}
+	if !ok {
+		return false, nil
+	}
 
-			for i := range conditions {
-				if conditions[i].Type == corev1.PodReady &&
-					conditions[i].Status == corev1.ConditionTrue {
-					return true, nil
-				}
+	switch p.Status.Phase {
+	case corev1.PodFailed, corev1.PodSucceeded:
+		return false, errors.New("pod completed")
+
+	case corev1.PodRunning:
+		for _, cond := range p.Status.Conditions {
+			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+				return true, nil
 			}
 		}
 	}
 
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.State.Waiting == nil {
+			continue
+		}
+
+		reason := cs.State.Waiting.Reason
+
+		if _, terminal := terminalContainerWaitReasons[reason]; !terminal {
+			continue
+		}
+
+		return false, fmt.Errorf("container %s: %s: %s", cs.Name, reason, cs.State.Waiting.Message)
+	}
+
 	return false, nil
 }
-
-// func (c *client) WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
-// 	timeout := time.After(300 * time.Second)
-// 	ticker := time.NewTicker(5 * time.Second)
-
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return nil, errors.New("cancelled")
-// 		case <-timeout:
-// 			return nil, errors.New("timeout")
-// 		case <-ticker.C:
-// 			service, err := c.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
-
-// 			if err != nil {
-// 				continue
-// 			}
-
-// 			if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
-// 				if len(service.Status.LoadBalancer.Ingress) == 0 {
-// 					continue
-// 				}
-
-// 				ingress := service.Status.LoadBalancer.Ingress[0]
-
-// 				if ingress.IP == "" {
-// 					continue
-// 				}
-// 			}
-
-// 			return service, nil
-// 		}
-// 	}
-// }
 
 func (c *client) WaitForService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
 	selector := fields.OneTermEqualSelector("metadata.name", name).String()
@@ -229,28 +178,26 @@ func (c *client) WaitForService(ctx context.Context, namespace, name string) (*c
 }
 
 func serviceReady(event watch.Event) (bool, error) {
-	switch event.Type {
-	case watch.Deleted:
+	if event.Type == watch.Deleted {
 		return false, errors.New("service deleted")
 	}
-	switch t := event.Object.(type) {
-	case *corev1.Service:
-		conditions := t.Status.Conditions
 
-		if t.Spec.Type == corev1.ServiceTypeLoadBalancer {
-			if len(t.Status.LoadBalancer.Ingress) == 0 {
-				return false, nil
-			}
+	s, ok := event.Object.(*corev1.Service)
 
-			ingress := t.Status.LoadBalancer.Ingress[0]
+	if !ok {
+		return false, nil
+	}
 
-			if ingress.IP == "" {
-				return false, nil
-			}
-		}
-
-		_ = conditions
+	if s.Spec.Type != corev1.ServiceTypeLoadBalancer {
 		return true, nil
+	}
+
+	// Managed load balancers may publish only a Hostname (e.g. AWS NLB/ELB)
+	// instead of an IP, so accept either.
+	for _, ing := range s.Status.LoadBalancer.Ingress {
+		if ing.IP != "" || ing.Hostname != "" {
+			return true, nil
+		}
 	}
 
 	return false, nil

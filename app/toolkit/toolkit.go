@@ -51,6 +51,7 @@ func RunToolKit(ctx context.Context, client kubernetes.Client, namespace string,
 	}
 
 	defer func() {
+		// Best-effort cleanup: detached from the (possibly cancelled) ctx.
 		client.CoreV1().Secrets(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
 	}()
 

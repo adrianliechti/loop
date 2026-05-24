@@ -28,7 +28,7 @@ var Command = &cli.Command{
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		client := app.MustClient(ctx, cmd)
 
-		port := app.MustRandomPort(ctx, cmd, 2375)
+		port := app.MustRandomPort(2375)
 		namespace := app.Namespace(ctx, cmd)
 
 		if namespace == "" {
@@ -40,10 +40,6 @@ var Command = &cli.Command{
 }
 
 func connectDaemon(ctx context.Context, client kubernetes.Client, namespace string, port int) error {
-	if namespace == "" {
-		namespace = client.Namespace()
-	}
-
 	name := "loop-docker-" + uuid.New().String()[0:7]
 
 	docker := "docker"
@@ -175,14 +171,21 @@ func createDaemon(ctx context.Context, client kubernetes.Client, namespace, name
 	}
 
 	pod, err := client.WaitForPod(ctx, namespace, name)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait briefly for dockerd to start accepting TCP connections after the
+	// readiness signal — the entrypoint takes a moment to bind 2375.
 	time.Sleep(10 * time.Second)
 
-	return pod, err
+	return pod, nil
 }
 
 func deleteDaemon(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		//return err
+	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kubernetes.IsNotFound(err) {
+		return err
 	}
 
 	return nil

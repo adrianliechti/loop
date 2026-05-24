@@ -2,27 +2,41 @@ package run
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 
 	"github.com/adrianliechti/loop/pkg/sftp"
 )
 
 func startServer(ctx context.Context, port int, path string) error {
-	s, err := sftp.NewServer(fmt.Sprintf("127.0.0.1:%d", port), path)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	s, err := sftp.NewServer(addr, path)
 
 	if err != nil {
 		return err
 	}
 
+	// Bind synchronously so bind failures (race on the port, EADDRINUSE) are
+	// surfaced to the caller instead of swallowed by a background goroutine.
+	l, err := net.Listen("tcp", addr)
+
+	if err != nil {
+		s.Close()
+		return err
+	}
+
 	go func() {
 		<-ctx.Done()
+		l.Close()
 		s.Close()
 	}()
 
 	go func() {
-		if err := s.ListenAndServe(); err != nil {
-			log.Println("could not start server", "error", err)
+		if err := s.Serve(l); err != nil && !errors.Is(err, net.ErrClosed) {
+			log.Println("could not serve sftp", "error", err)
 		}
 	}()
 
