@@ -102,12 +102,8 @@ func MustPortOrRandom(ctx context.Context, cmd *cli.Command, preference int) int
 	return port
 }
 
-func RandomPort(ctx context.Context, cmd *cli.Command, preference int) (int, error) {
-	return system.FreePort(preference)
-}
-
-func MustRandomPort(ctx context.Context, cmd *cli.Command, preference int) int {
-	port, err := RandomPort(ctx, cmd, preference)
+func MustRandomPort(preference int) int {
+	port, err := system.FreePort(preference)
 
 	if err != nil {
 		cli.Fatal(err)

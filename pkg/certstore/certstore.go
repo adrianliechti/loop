@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"os"
 	"strings"
 )
@@ -17,6 +18,11 @@ func certFingerprint(path string) (string, error) {
 	}
 
 	block, _ := pem.Decode(data)
+
+	if block == nil {
+		return "", errors.New("no PEM block found")
+	}
+
 	cert, err := x509.ParseCertificate(block.Bytes)
 
 	if err != nil {

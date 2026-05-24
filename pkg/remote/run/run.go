@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/pkg/docker"
@@ -126,10 +127,33 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		}
 	}
 
+	// connectTunnel only returns non-nil before signalling ready, so we can
+	// reliably surface setup errors via tunnelDone. Late errors (after ready)
+	// are logged from inside the SSH/port-forward goroutines.
+	tunnelReady := make(chan struct{})
+	tunnelDone := make(chan error, 1)
+
 	go func() {
-		connectTunnel(ctx, client, pod, container, options)
+		tunnelDone <- connectTunnel(ctx, client, pod, container, options, tunnelReady)
 		cancel()
 	}()
+
+	// Wait for tunnels to actually be set up before firing OnReady, so
+	// callbacks like "open browser at localhost:port" don't race SSH listen.
+	//
+	// connectTunnel only returns non-nil before signalling ready, so a nil
+	// from tunnelDone here means it raced with ready/ctx — fall back to
+	// ctx.Err() rather than silently returning success.
+	select {
+	case <-tunnelReady:
+	case err := <-tunnelDone:
+		if err == nil {
+			return ctx.Err()
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	if options.OnReady != nil {
 		if err := options.OnReady(ctx, client, pod); err != nil {
@@ -257,12 +281,16 @@ func createPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) e
 }
 
 func deletePod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
-	return client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
+	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
-	})
+	}); err != nil && !kubernetes.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }
 
-func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, container *Container, options *RunOptions) error {
+func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Pod, container *Container, options *RunOptions, ready chan<- struct{}) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -272,20 +300,42 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 		return err
 	}
 
-	ready := make(chan struct{})
+	pfReady := make(chan struct{})
+	pfErr := make(chan error, 1)
 
 	go func() {
-		client.PodPortForward(ctx, pod.Namespace, pod.Name, "", map[int]int{port: 22}, ready)
+		pfErr <- client.PodPortForward(ctx, pod.Namespace, pod.Name, "", map[int]int{port: 22}, pfReady)
 		cancel()
 	}()
 
-	<-ready
+	// Wait for the port-forward to be ready, but bail out if it fails first
+	// (otherwise an early port-forward error leaves us blocked here forever).
+	// A nil pfErr means PodPortForward returned cleanly only because ctx was
+	// cancelled, so surface that as the cause.
+	select {
+	case <-pfReady:
+	case err := <-pfErr:
+		if err == nil {
+			return ctx.Err()
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
+	// portsReady fires once the local forwarded ports are actually listening;
+	// this is what OnReady needs to wait for (e.g. opening a browser at a
+	// forwarded port). nil when there are no forwarded ports.
+	var portsReady <-chan struct{}
+
 	if len(container.Ports) > 0 {
+		ch := make(chan struct{})
+		portsReady = ch
+
 		go func() {
-			if err := tunnelPorts(ctx, addr, container.Ports); err != nil {
+			if err := tunnelPorts(ctx, addr, container.Ports, ch); err != nil {
 				cli.Error(err)
 			}
 
@@ -298,14 +348,20 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 		var mountCommands []string
 
 		for _, volume := range container.Volumes {
-			targetPath := "/data" + volume.Target
+			targetPath := path.Join("/data", volume.Target)
+			sourcePath := path.Clean("/" + volume.Target)
 
 			mounts = append(mounts, sftp.Mount{
 				Source: volume.Source,
-				Target: volume.Target,
+				Target: sourcePath,
 			})
 
-			mountCommands = append(mountCommands, fmt.Sprintf("mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s", targetPath, volume.Target, targetPath))
+			mountCommands = append(mountCommands, fmt.Sprintf(
+				"mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s",
+				shellQuote(targetPath),
+				shellQuote(sourcePath),
+				shellQuote(targetPath),
+			))
 		}
 
 		sftpPort, err := system.FreePort(0)
@@ -318,16 +374,15 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 			return err
 		}
 
-		var sshOptions []ssh.Option
+		marker := "/tmp/loop-mounted"
+		cmd := strings.Join(mountCommands, " && ") + " && touch " + shellQuote(marker) + " && /bin/sleep infinity"
 
-		sshOptions = append(sshOptions,
+		c := ssh.New(addr,
 			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
-			ssh.WithCommand(strings.Join(mountCommands, " && ")+" && /bin/sleep infinity"),
+			ssh.WithCommand(cmd),
 			ssh.WithStderr(os.Stderr),
 			ssh.WithStdout(os.Stdout),
 		)
-
-		c := ssh.New(addr, sshOptions...)
 
 		go func() {
 			if err := c.Run(ctx); err != nil {
@@ -336,15 +391,61 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 
 			cancel()
 		}()
+
+		// Wait for sshfs to actually mount before letting OnReady/attach
+		// proceed against an unmounted workspace. waitForMount polls the
+		// marker that the command above touches after a successful mount.
+		if err := waitForMount(ctx, client, pod.Namespace, pod.Name, "loop-tunnel", marker); err != nil {
+			return err
+		}
 	}
+
+	if portsReady != nil {
+		select {
+		case <-portsReady:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	close(ready)
 
 	<-ctx.Done()
 
 	return nil
 }
 
-func tunnelPorts(ctx context.Context, addr string, ports []Port) error {
-	var options []ssh.Option
+// shellQuote single-quotes s for safe inclusion in a /bin/sh command line.
+// Single quotes inside s are escaped as '\”.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// waitForMount polls the pod for marker until it exists (sshfs has mounted)
+// or the context expires. Each PodExec call has non-trivial overhead, so
+// the poll interval is deliberately coarse.
+func waitForMount(ctx context.Context, client kubernetes.Client, namespace, pod, container, marker string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if err := client.PodExec(ctx, namespace, pod, container, []string{"test", "-f", marker}, false, nil, io.Discard, io.Discard); err == nil {
+			return nil
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for sshfs mount: %w", ctx.Err())
+		}
+	}
+}
+
+func tunnelPorts(ctx context.Context, addr string, ports []Port, ready chan<- struct{}) error {
+	options := []ssh.Option{ssh.WithReady(ready)}
 
 	for _, p := range ports {
 		options = append(options, ssh.WithLocalPortForward(ssh.PortForward{LocalPort: p.Source, RemotePort: p.Target}))
@@ -357,28 +458,34 @@ func tunnelPorts(ctx context.Context, addr string, ports []Port) error {
 
 func copyVolumes(ctx context.Context, client kubernetes.Client, namespace, name string, volumes []Volume) error {
 	for _, v := range volumes {
-		path := path.Join("/data", v.Target)
-
-		options := &docker.TarballOptions{}
-
-		if v.Identity != nil {
-			options.UID = &v.Identity.UID
-			options.GID = &v.Identity.GID
-		}
-
-		r, w := io.Pipe()
-
-		go func() {
-			defer r.Close()
-
-			docker.WriteTarball(w, v.Source, options)
-
-		}()
-
-		if err := client.PodExec(ctx, namespace, name, "loop-tunnel", []string{"tar", "xf", "-", "-C", path}, false, r, os.Stdout, os.Stdout); err != nil {
+		if err := copyVolume(ctx, client, namespace, name, v); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func copyVolume(ctx context.Context, client kubernetes.Client, namespace, name string, v Volume) error {
+	target := path.Join("/data", v.Target)
+
+	options := &docker.TarballOptions{}
+
+	if v.Identity != nil {
+		options.UID = &v.Identity.UID
+		options.GID = &v.Identity.GID
+	}
+
+	r, w := io.Pipe()
+
+	// Closing the reader on exit causes a hung WriteTarball (no consumer left)
+	// to fail with ErrClosedPipe, releasing the goroutine.
+	defer r.Close()
+
+	go func() {
+		err := docker.WriteTarball(w, v.Source, options)
+		w.CloseWithError(err)
+	}()
+
+	return client.PodExec(ctx, namespace, name, "loop-tunnel", []string{"tar", "xf", "-", "-C", target}, false, r, os.Stdout, os.Stdout)
 }

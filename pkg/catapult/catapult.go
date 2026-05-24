@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
-
-	"golang.org/x/exp/maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ type Catapult struct {
 
 	tunnels []*tunnel
 
+	mu       sync.Mutex
 	pods     map[string]corev1.Pod
 	services map[string]corev1.Service
 }
@@ -96,18 +98,16 @@ func (c *Catapult) Start(ctx context.Context) error {
 	}
 
 	for {
+		select {
+		case <-time.After(10 * time.Second):
+		case <-ctx.Done():
+			return nil
+		}
+
 		if err := c.Refresh(ctx); err != nil {
 			if c.options.Logger != nil {
 				c.options.Logger.ErrorContext(ctx, "refresh failed", "error", err)
 			}
-		}
-
-		select {
-		case <-time.After(10 * time.Second):
-			continue
-
-		case <-ctx.Done():
-			return nil
 		}
 	}
 }
@@ -115,61 +115,65 @@ func (c *Catapult) Start(ctx context.Context) error {
 func (c *Catapult) Refresh(ctx context.Context) error {
 	var result error
 
-	tunnels := c.listTunnel()
+	desired := c.listTunnel()
 
-	// remove unused tunnels
-	for _, i := range c.tunnels {
-		tunnel := i
-		removed := true
+	desiredByAddr := make(map[string]*tunnel, len(desired))
+	for _, t := range desired {
+		desiredByAddr[t.address] = t
+	}
 
-		for _, t := range tunnels {
-			if tunnel.address == t.address {
-				removed = false
-				break
-			}
+	previousByAddr := make(map[string]*tunnel, len(c.tunnels))
+	for _, t := range c.tunnels {
+		previousByAddr[t.address] = t
+	}
+
+	// Stop tunnels whose address is gone, OR whose descriptor changed
+	// (different hosts/ports/target pod). Anything still equivalent is reused.
+	for addr, t := range previousByAddr {
+		desiredT, kept := desiredByAddr[addr]
+
+		if kept && t.equivalent(desiredT) {
+			continue
 		}
 
-		if removed {
-			c.hosts.Remove(tunnel.address)
+		c.hosts.Remove(t.address)
 
-			if err := tunnel.Stop(); err != nil {
-				result = errors.Join(result, err)
-				continue
-			}
+		if err := t.Stop(); err != nil {
+			result = errors.Join(result, err)
+			continue
+		}
 
-			if c.options.DeleteFunc != nil {
-				c.options.DeleteFunc(tunnel.address, tunnel.hosts, maps.Keys(tunnel.ports))
-			}
+		if c.options.DeleteFunc != nil {
+			c.options.DeleteFunc(t.address, t.hosts, slices.Collect(maps.Keys(t.ports)))
 		}
 	}
 
-	// add new tunnels
-	for _, i := range tunnels {
-		tunnel := i
-		added := true
+	// Build the new active tunnel set. Reuse the prior tunnel object (keeping
+	// its running goroutine + cancel func) only when the descriptor is
+	// equivalent; otherwise start the new one.
+	next := make([]*tunnel, 0, len(desired))
 
-		for _, t := range c.tunnels {
-			if tunnel.address == t.address {
-				added = false
-				break
-			}
+	for _, t := range desired {
+		if prev, ok := previousByAddr[t.address]; ok && prev.equivalent(t) {
+			next = append(next, prev)
+			continue
 		}
 
-		if added {
-			if err := tunnel.Start(ctx, nil); err != nil {
-				result = errors.Join(result, err)
-				continue
-			}
-
-			c.hosts.Add(tunnel.address, tunnel.hosts...)
-
-			if c.options.AddFunc != nil {
-				c.options.AddFunc(tunnel.address, tunnel.hosts, maps.Keys(tunnel.ports))
-			}
+		if err := t.Start(ctx, nil); err != nil {
+			result = errors.Join(result, err)
+			continue
 		}
+
+		c.hosts.Add(t.address, t.hosts...)
+
+		if c.options.AddFunc != nil {
+			c.options.AddFunc(t.address, t.hosts, slices.Collect(maps.Keys(t.ports)))
+		}
+
+		next = append(next, t)
 	}
 
-	c.tunnels = tunnels
+	c.tunnels = next
 
 	// Do not flush if context is cancelled - let defer cleanup handle it
 	if ctx.Err() != nil {
@@ -177,24 +181,29 @@ func (c *Catapult) Refresh(ctx context.Context) error {
 	}
 
 	if err := c.hosts.Flush(); err != nil {
-		return err
+		return errors.Join(result, err)
 	}
 
-	return nil
+	return result
 }
 
 func (c *Catapult) listTunnel() []*tunnel {
+	c.mu.Lock()
+	allServices := slices.Collect(maps.Values(c.services))
+	allPods := slices.Collect(maps.Values(c.pods))
+	c.mu.Unlock()
+
 	tunnels := make([]*tunnel, 0)
 
-	for _, service := range c.services {
+	for _, service := range allServices {
 		if len(service.Spec.Selector) == 0 {
 			continue
 		}
 
-		pods := c.selectPods(service.Namespace, labels.SelectorFromSet(service.Spec.Selector))
+		matching := selectPods(allPods, service.Namespace, labels.SelectorFromSet(service.Spec.Selector))
 
 		if service.Spec.ClusterIP == corev1.ClusterIPNone {
-			for _, pod := range pods {
+			for _, pod := range matching {
 				hosts := []string{
 					fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.Name, service.Name, service.Namespace),
 				}
@@ -204,25 +213,29 @@ func (c *Catapult) listTunnel() []*tunnel {
 
 				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 			}
-		} else {
-			if len(pods) > 0 {
-				pod := pods[0]
 
-				hosts := []string{
-					fmt.Sprintf("%s.%s", service.Name, service.Namespace),
-					fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
-				}
-
-				address := mapAddress(service.Spec.ClusterIP)
-				ports := selectPorts(service, pod.Spec.Containers...)
-
-				if service.Namespace == c.options.Scope {
-					hosts = append([]string{service.Name}, hosts...)
-				}
-
-				tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
-			}
+			continue
 		}
+
+		if len(matching) == 0 {
+			continue
+		}
+
+		pod := matching[0]
+
+		hosts := []string{
+			fmt.Sprintf("%s.%s", service.Name, service.Namespace),
+			fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace),
+		}
+
+		if service.Namespace == c.options.Scope {
+			hosts = append([]string{service.Name}, hosts...)
+		}
+
+		address := mapAddress(service.Spec.ClusterIP)
+		ports := selectPorts(service, pod.Spec.Containers...)
+
+		tunnels = append(tunnels, newTunnel(c.client, pod.Namespace, pod.Name, address, ports, hosts))
 	}
 
 	return tunnels
@@ -239,24 +252,32 @@ func (c *Catapult) watchPods(ctx context.Context, client kubernetes.Client, name
 		return err
 	}
 
+	c.mu.Lock()
 	for _, p := range list.Items {
 		c.pods[resourceKey(&p)] = p
 	}
+	c.mu.Unlock()
 
 	handlers := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			p := obj.(*corev1.Pod)
+			c.mu.Lock()
 			c.pods[resourceKey(p)] = *p
+			c.mu.Unlock()
 		},
 
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			p := newObj.(*corev1.Pod)
+			c.mu.Lock()
 			c.pods[resourceKey(p)] = *p
+			c.mu.Unlock()
 		},
 
 		DeleteFunc: func(obj interface{}) {
 			p := obj.(*corev1.Pod)
+			c.mu.Lock()
 			delete(c.pods, resourceKey(p))
+			c.mu.Unlock()
 		},
 	}
 
@@ -275,24 +296,32 @@ func (c *Catapult) watchServices(ctx context.Context, client kubernetes.Client, 
 		return err
 	}
 
+	c.mu.Lock()
 	for _, s := range list.Items {
 		c.services[resourceKey(&s)] = s
 	}
+	c.mu.Unlock()
 
 	handlers := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			s := obj.(*corev1.Service)
+			c.mu.Lock()
 			c.services[resourceKey(s)] = *s
+			c.mu.Unlock()
 		},
 
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			s := newObj.(*corev1.Service)
+			c.mu.Lock()
 			c.services[resourceKey(s)] = *s
+			c.mu.Unlock()
 		},
 
 		DeleteFunc: func(obj interface{}) {
 			s := obj.(*corev1.Service)
+			c.mu.Lock()
 			delete(c.services, resourceKey(s))
+			c.mu.Unlock()
 		},
 	}
 
@@ -304,23 +333,19 @@ func (c *Catapult) watchServices(ctx context.Context, client kubernetes.Client, 
 	return nil
 }
 
-func (c *Catapult) selectPods(namespace string, selector labels.Selector) []corev1.Pod {
+func selectPods(pods []corev1.Pod, namespace string, selector labels.Selector) []corev1.Pod {
 	var result []corev1.Pod
 
-	for _, pod := range c.pods {
+	for _, pod := range pods {
 		if pod.Namespace != namespace {
 			continue
 		}
 
-		// skip non-runing pods
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
 
-		labels := labels.Set(pod.Labels)
-
-		// filter pods by selector
-		if !selector.Matches(labels) {
+		if !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}
 

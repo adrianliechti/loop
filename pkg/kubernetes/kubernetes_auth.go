@@ -1,13 +1,23 @@
 package kubernetes
 
 import (
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"k8s.io/client-go/transport"
 )
+
+// ensureScheme returns host with an https:// scheme prepended if no scheme is
+// present. rest.Config.Host can be a bare "host:port" (e.g. "localhost:6443"),
+// which url.Parse would otherwise mis-parse as scheme="localhost".
+func ensureScheme(host string) string {
+	if strings.Contains(host, "://") {
+		return host
+	}
+
+	return "https://" + host
+}
 
 type Credentials struct {
 	Host string
@@ -25,36 +35,32 @@ type Credentials struct {
 func (c *client) Credentials() (*Credentials, error) {
 	rc := c.Config()
 
-	host := "localhost"
-	port := "443"
+	u, err := url.Parse(ensureScheme(rc.Host))
 
-	var url *url.URL
-
-	if h, p, err := net.SplitHostPort(rc.Host); err == nil {
-		host = h
-		port = p
-
-		url, _ = url.Parse("https://" + net.JoinHostPort(h, p))
-		url = url.JoinPath(rc.APIPath)
+	if err != nil {
+		return nil, err
 	}
 
-	if val, err := url.Parse(rc.Host); err == nil {
-		if h := val.Hostname(); h != "" {
-			host = h
-		}
+	host := u.Hostname()
+	port := u.Port()
 
-		if p := val.Port(); p != "" {
-			port = p
-		}
+	if host == "" {
+		host = "localhost"
+	}
 
-		url = val
+	if port == "" {
+		port = "443"
+	}
+
+	if rc.APIPath != "" {
+		u = u.JoinPath(rc.APIPath)
 	}
 
 	result := &Credentials{
 		Host: host,
 		Port: port,
 
-		URL: url,
+		URL: u,
 
 		CAData:   rc.CAData,
 		KeyData:  rc.KeyData,
@@ -75,7 +81,12 @@ func (c *client) Credentials() (*Credentials, error) {
 		return nil, err
 	}
 
-	req, _ := http.NewRequest("GET", url.String(), nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
+
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
@@ -85,14 +96,13 @@ func (c *client) Credentials() (*Credentials, error) {
 	header := resp.Request.Header.Get("Authorization")
 
 	if strings.HasPrefix(header, "Bearer ") {
-		result.Token = header[7:]
+		result.Token = strings.TrimPrefix(header, "Bearer ")
 	}
 
 	return result, nil
 }
 
-type authWrapper struct {
-}
+type authWrapper struct{}
 
 func (rt *authWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{

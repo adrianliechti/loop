@@ -2,6 +2,8 @@ package run
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,10 +38,24 @@ var Command = &cli.Command{
 		client := app.MustClient(ctx, cmd)
 
 		image := cmd.Args().Get(0)
+
+		if image == "" {
+			return errors.New("image argument is required")
+		}
+
 		namespace := app.Namespace(ctx, cmd)
 
-		ports := mustParsePorts(cmd.StringSlice("port"))
-		volumes := mustParseVolumes(cmd.StringSlice("volume"))
+		ports, err := parsePorts(cmd.StringSlice("port"))
+
+		if err != nil {
+			return err
+		}
+
+		volumes, err := parseVolumes(cmd.StringSlice("volume"))
+
+		if err != nil {
+			return err
+		}
 
 		container := &run.Container{
 			Image: image,
@@ -64,21 +80,26 @@ var Command = &cli.Command{
 	},
 }
 
-func mustParsePorts(ports []string) []run.Port {
+func parsePorts(ports []string) ([]run.Port, error) {
 	var result []run.Port
 
 	for _, v := range ports {
 		parts := strings.Split(v, ":")
 
 		if len(parts) != 2 {
-			panic("ports must be in the form of 'source:target'")
+			return nil, fmt.Errorf("port %q must be in the form 'source:target'", v)
 		}
 
-		source, _ := strconv.Atoi(parts[0])
-		target, _ := strconv.Atoi(parts[1])
+		source, err := strconv.Atoi(parts[0])
 
-		if source <= 0 || target <= 0 {
-			panic("invalid port forward")
+		if err != nil || source <= 0 {
+			return nil, fmt.Errorf("invalid source port %q", parts[0])
+		}
+
+		target, err := strconv.Atoi(parts[1])
+
+		if err != nil || target <= 0 {
+			return nil, fmt.Errorf("invalid target port %q", parts[1])
 		}
 
 		result = append(result, run.Port{
@@ -87,37 +108,37 @@ func mustParsePorts(ports []string) []run.Port {
 		})
 	}
 
-	return result
+	return result, nil
 }
 
-func mustParseVolumes(volumes []string) []run.Volume {
+func parseVolumes(volumes []string) ([]run.Volume, error) {
 	var result []run.Volume
 
 	for _, v := range volumes {
 		parts := strings.Split(v, ":")
 
 		if len(parts) < 2 {
-			panic("volume must be in the form of 'source:target'")
+			return nil, fmt.Errorf("volume %q must be in the form 'source:target'", v)
 		}
 
 		source := strings.Join(parts[:len(parts)-1], ":")
 		target := parts[len(parts)-1]
 
-		source, err := filepath.Abs(source)
-
-		if err != nil {
-			source = ""
+		if source == "" || target == "" {
+			return nil, fmt.Errorf("invalid volume mount %q", v)
 		}
 
-		if source == "" || target == "" {
-			panic("invalid volume mount")
+		abs, err := filepath.Abs(source)
+
+		if err != nil {
+			return nil, fmt.Errorf("invalid volume source %q: %w", source, err)
 		}
 
 		result = append(result, run.Volume{
-			Source: source,
+			Source: abs,
 			Target: target,
 		})
 	}
 
-	return result
+	return result, nil
 }

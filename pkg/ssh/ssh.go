@@ -22,6 +22,8 @@ type Client struct {
 
 	localPortForwards  []PortForward
 	remotePortForwards []PortForward
+
+	ready chan<- struct{}
 }
 
 func New(addr string, options ...Option) *Client {
@@ -92,6 +94,16 @@ func WithLocalPortForward(p PortForward) Option {
 	}
 }
 
+// WithReady configures a channel that Run closes after the SSH session has
+// been established and every local/remote port forward is actually listening.
+// Callers can use this to delay signalling "ready" downstream (e.g. opening
+// a browser) until the tunnels can actually accept connections.
+func WithReady(ch chan<- struct{}) Option {
+	return func(c *Client) {
+		c.ready = ch
+	}
+}
+
 func WithRemotePortForward(p PortForward) Option {
 	return func(c *Client) {
 		if p.LocalAddr == "" {
@@ -157,6 +169,11 @@ func (c *Client) Run(ctx context.Context) error {
 		go tunnelConnections(listener, &net.Dialer{}, fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
 	}
 
+	// All port forwards are bound at this point.
+	if c.ready != nil {
+		close(c.ready)
+	}
+
 	if c.command != "" {
 		return session.Run(c.command)
 	}
@@ -181,30 +198,21 @@ func tunnelConnections(l listener, d dialer, addr string) error {
 			return err
 		}
 
-		defer conn.Close()
-
 		go tunnelConnection(conn, d, addr)
 	}
 }
 
-func tunnelConnection(c net.Conn, d dialer, addr string) error {
+func tunnelConnection(c net.Conn, d dialer, addr string) {
+	defer c.Close()
+
 	conn, err := d.Dial("tcp", addr)
 
 	if err != nil {
-		return err
+		return
 	}
 
 	defer conn.Close()
 
-	return copy(conn, c)
-}
-
-func copy(local, remote net.Conn) error {
-	defer local.Close()
-	defer remote.Close()
-
-	go io.Copy(local, remote)
-	_, err := io.Copy(remote, local)
-
-	return err
+	go io.Copy(conn, c)
+	io.Copy(c, conn)
 }

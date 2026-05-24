@@ -13,13 +13,7 @@ var NameFlag = &cli.StringFlag{
 }
 
 func Name(ctx context.Context, cmd *cli.Command) string {
-	value := cmd.String(NameFlag.Name)
-
-	if value == "" {
-		return ""
-	}
-
-	return value
+	return cmd.String(NameFlag.Name)
 }
 
 func MustName(ctx context.Context, cmd *cli.Command) string {
@@ -38,13 +32,7 @@ var ContainerFlag = &cli.StringFlag{
 }
 
 func Container(ctx context.Context, cmd *cli.Command) string {
-	value := cmd.String(ContainerFlag.Name)
-
-	if value == "" {
-		return ""
-	}
-
-	return value
+	return cmd.String(ContainerFlag.Name)
 }
 
 func ContainerName(ctx context.Context, cmd *cli.Command) string {
@@ -63,13 +51,7 @@ var NamespaceFlag = &cli.StringFlag{
 }
 
 func Namespace(ctx context.Context, cmd *cli.Command) string {
-	value := cmd.String(NamespaceFlag.Name)
-
-	if value == "" {
-		return ""
-	}
-
-	return value
+	return cmd.String(NamespaceFlag.Name)
 }
 
 func MustNamespace(ctx context.Context, cmd *cli.Command) string {
@@ -88,19 +70,13 @@ var NamespacesFlag = &cli.StringSliceFlag{
 }
 
 func Namespaces(ctx context.Context, cmd *cli.Command) []string {
-	value := cmd.StringSlice(NamespacesFlag.Name)
-
-	if len(value) == 0 {
-		return nil
-	}
-
-	return value
+	return cmd.StringSlice(NamespacesFlag.Name)
 }
 
 func MustNamespaces(ctx context.Context, cmd *cli.Command) []string {
 	value := Namespaces(ctx, cmd)
 
-	if value == nil {
+	if len(value) == 0 {
 		cli.Fatal(errors.New("namespaces missing"))
 	}
 
@@ -113,13 +89,7 @@ var ScopeFlag = &cli.StringFlag{
 }
 
 func Scope(ctx context.Context, cmd *cli.Command) string {
-	value := cmd.String(ScopeFlag.Name)
-
-	if value == "" {
-		return ""
-	}
-
-	return value
+	return cmd.String(ScopeFlag.Name)
 }
 
 func MustScope(ctx context.Context, cmd *cli.Command) string {

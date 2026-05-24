@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/system"
@@ -56,6 +58,26 @@ func (t *tunnel) Start(ctx context.Context, readyChan chan struct{}) error {
 	}()
 
 	return nil
+}
+
+// equivalent reports whether two tunnels target the same workload with the
+// same hosts and port mappings — i.e. whether the running goroutine is still
+// correct for the new desired state.
+func (t *tunnel) equivalent(o *tunnel) bool {
+	if t.namespace != o.namespace || t.name != o.name {
+		return false
+	}
+
+	if !maps.Equal(t.ports, o.ports) {
+		return false
+	}
+
+	a := slices.Clone(t.hosts)
+	b := slices.Clone(o.hosts)
+	slices.Sort(a)
+	slices.Sort(b)
+
+	return slices.Equal(a, b)
 }
 
 func (t *tunnel) Stop() error {

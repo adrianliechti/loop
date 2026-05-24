@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"io"
 	"net"
+	"os"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -15,17 +16,52 @@ type Mount struct {
 	Target string
 }
 
+type rootMount struct {
+	root   *os.Root
+	target string
+}
+
 type Server struct {
-	addr   string
-	root   string
-	mounts []Mount
+	addr string
+
+	// root and mounts are opened once in NewServer and never reassigned, so
+	// handlers can read them without synchronization. *os.Root itself is safe
+	// to Close concurrently with in-flight operations: pending ops complete or
+	// return fs.ErrClosed, and the fd is only released afterwards.
+	root   *os.Root
+	mounts []rootMount
 
 	config *ssh.ServerConfig
-
-	listener net.Listener
 }
 
 func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
+	r, err := os.OpenRoot(root)
+
+	if err != nil {
+		return nil, err
+	}
+
+	openedMounts := make([]rootMount, 0, len(mounts))
+
+	for _, mount := range mounts {
+		mountRoot, err := os.OpenRoot(mount.Source)
+
+		if err != nil {
+			r.Close()
+
+			for _, opened := range openedMounts {
+				opened.root.Close()
+			}
+
+			return nil, err
+		}
+
+		openedMounts = append(openedMounts, rootMount{
+			root:   mountRoot,
+			target: toRelPath(mount.Target),
+		})
+	}
+
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			return nil, nil
@@ -35,6 +71,12 @@ func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
 	signer, err := generateSigner()
 
 	if err != nil {
+		r.Close()
+
+		for _, mount := range openedMounts {
+			mount.root.Close()
+		}
+
 		return nil, err
 	}
 
@@ -42,29 +84,43 @@ func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
 
 	return &Server{
 		addr:   addr,
-		root:   root,
-		mounts: mounts,
-
+		root:   r,
+		mounts: openedMounts,
 		config: config,
 	}, nil
 }
 
+// Close releases the root directories. In-flight handlers that touch a root
+// after Close will see fs.ErrClosed on their next operation and unwind on their
+// own; Close does not wait for them to do so, which avoids parking shutdown on
+// a long-lived sshfs client. The listener used by Serve is owned by the caller;
+// close it separately to stop the accept loop.
 func (s *Server) Close() error {
-	if s.listener != nil {
-		s.listener.Close()
-		s.listener = nil
+	var result error
+
+	if s.root != nil {
+		result = s.root.Close()
+		s.root = nil
 	}
 
-	return nil
+	for i := range s.mounts {
+		if s.mounts[i].root == nil {
+			continue
+		}
+
+		if err := s.mounts[i].root.Close(); result == nil {
+			result = err
+		}
+
+		s.mounts[i].root = nil
+	}
+
+	return result
 }
 
-func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("tcp", s.addr)
-
-	if err != nil {
-		return err
-	}
-
+// Serve accepts connections on the supplied listener until it is closed.
+// The caller owns l and is responsible for closing it.
+func (s *Server) Serve(l net.Listener) error {
 	for {
 		c, err := l.Accept()
 
@@ -74,6 +130,21 @@ func (s *Server) ListenAndServe() error {
 
 		go s.HandleConn(c)
 	}
+}
+
+// ListenAndServe binds the address passed to NewServer and serves on it.
+// Callers that need synchronous bind-error handling should call net.Listen
+// themselves and pass the listener to Serve.
+func (s *Server) ListenAndServe() error {
+	l, err := net.Listen("tcp", s.addr)
+
+	if err != nil {
+		return err
+	}
+
+	defer l.Close()
+
+	return s.Serve(l)
 }
 
 func (s *Server) HandleConn(c net.Conn) error {
@@ -99,16 +170,12 @@ func (s *Server) HandleConn(c net.Conn) error {
 
 		go func(in <-chan *ssh.Request) {
 			for req := range in {
-				switch req.Type {
-				case "subsystem":
-					if string(req.Payload[4:]) == "sftp" {
-						req.Reply(true, nil)
-						continue
-					}
+				if req.Type == "subsystem" && subsystemName(req.Payload) == "sftp" {
+					req.Reply(true, nil)
+					continue
 				}
 
 				req.Reply(false, nil)
-
 			}
 		}(requests)
 
@@ -124,6 +191,17 @@ func (s *Server) HandleConn(c net.Conn) error {
 	return nil
 }
 
+// subsystemName extracts the subsystem name from an SSH subsystem-request
+// payload (4-byte length prefix followed by the name), returning "" on a
+// short payload instead of panicking on the slice.
+func subsystemName(payload []byte) string {
+	if len(payload) < 4 {
+		return ""
+	}
+
+	return string(payload[4:])
+}
+
 func generateSigner() (ssh.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 
@@ -135,26 +213,20 @@ func generateSigner() (ssh.Signer, error) {
 }
 
 type RequestServer struct {
-	root   string
-	mounts []Mount
-
 	server *sftp.RequestServer
 }
 
-func NewRequestServer(session io.ReadWriteCloser, root string, mounts ...Mount) *RequestServer {
-	handler := &handler{root: root, mounts: mounts}
+func NewRequestServer(session io.ReadWriteCloser, root *os.Root, mounts ...rootMount) *RequestServer {
+	h := &handler{root: root, mounts: mounts}
 
 	s := sftp.NewRequestServer(session, sftp.Handlers{
-		FileGet:  handler,
-		FilePut:  handler,
-		FileCmd:  handler,
-		FileList: handler,
+		FileGet:  h,
+		FilePut:  h,
+		FileCmd:  h,
+		FileList: h,
 	})
 
 	return &RequestServer{
-		root:   root,
-		mounts: mounts,
-
 		server: s,
 	}
 }

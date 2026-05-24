@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -17,6 +18,8 @@ import (
 	"k8s.io/client-go/restmapper"
 )
 
+var documentSeparator = regexp.MustCompile(`(?m)^---$`)
+
 func (c *client) Apply(ctx context.Context, namespace string, reader io.Reader) error {
 	if namespace == "" {
 		namespace = c.Namespace()
@@ -28,11 +31,7 @@ func (c *client) Apply(ctx context.Context, namespace string, reader io.Reader) 
 		return err
 	}
 
-	docs, err := splitDocuments(data)
-
-	if err != nil {
-		return err
-	}
+	docs := splitDocuments(data)
 
 	discovery, err := discovery.NewDiscoveryClientForConfig(c.Config())
 
@@ -92,7 +91,13 @@ func (c *client) ApplyFile(ctx context.Context, namespace string, path string) e
 }
 
 func (c *client) ApplyURL(ctx context.Context, namespace string, url string) error {
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
 		return err
@@ -100,17 +105,21 @@ func (c *client) ApplyURL(ctx context.Context, namespace string, url string) err
 
 	defer resp.Body.Close()
 
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("unexpected status %s fetching %s", resp.Status, url)
+	}
+
 	return c.Apply(ctx, namespace, resp.Body)
 }
 
-func splitDocuments(data []byte) ([][]byte, error) {
-	re := regexp.MustCompile(`(?m)^---$`)
+func splitDocuments(data []byte) [][]byte {
+	parts := documentSeparator.Split(string(data), -1)
 
-	var results [][]byte
+	results := make([][]byte, len(parts))
 
-	for _, doc := range re.Split(string(data), -1) {
-		results = append(results, []byte(doc))
+	for i, doc := range parts {
+		results[i] = []byte(doc)
 	}
 
-	return results, nil
+	return results
 }

@@ -82,7 +82,7 @@ func (c *client) PodPortForward(ctx context.Context, namespace, name, address st
 		mappings = append(mappings, fmt.Sprintf("%d:%d", s, t))
 	}
 
-	dialer, err := c.createyDialer(namespace, name)
+	dialer, err := c.createDialer(namespace, name)
 
 	if err != nil {
 		return err
@@ -97,52 +97,20 @@ func (c *client) PodPortForward(ctx context.Context, namespace, name, address st
 	return forwarder.ForwardPorts()
 }
 
-func (c *client) createyDialer(namespace, name string) (httpstream.Dialer, error) {
-	primary, err := c.createPrimaryDialer(namespace, name)
-
-	if err != nil {
-		return nil, err
-	}
-
-	secondary, err := c.createSecondaryDialer(namespace, name)
-
-	if err != nil {
-		return nil, err
-	}
-
-	dialer := portforward.NewFallbackDialer(primary, secondary, func(err error) bool {
-		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
-	})
-
-	return dialer, nil
-}
-
-func (c *client) createPrimaryDialer(namespace, name string) (httpstream.Dialer, error) {
+func (c *client) createDialer(namespace, name string) (httpstream.Dialer, error) {
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, name)
 
 	host := c.Config().Host
 	host = strings.TrimPrefix(host, "http://")
 	host = strings.TrimPrefix(host, "https://")
 
-	url := &url.URL{Scheme: "https", Path: path, Host: host}
+	u := &url.URL{Scheme: "https", Path: path, Host: host}
 
-	dialer, err := portforward.NewSPDYOverWebsocketDialer(url, c.Config())
+	primary, err := portforward.NewSPDYOverWebsocketDialer(u, c.Config())
 
 	if err != nil {
 		return nil, err
 	}
-
-	return dialer, nil
-}
-
-func (c *client) createSecondaryDialer(namespace, name string) (httpstream.Dialer, error) {
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, name)
-
-	host := c.Config().Host
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimPrefix(host, "https://")
-
-	url := &url.URL{Scheme: "https", Path: path, Host: host}
 
 	transport, upgrader, err := spdy.RoundTripperFor(c.Config())
 
@@ -150,7 +118,9 @@ func (c *client) createSecondaryDialer(namespace, name string) (httpstream.Diale
 		return nil, err
 	}
 
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, url)
+	secondary := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, u)
 
-	return dialer, nil
+	return portforward.NewFallbackDialer(primary, secondary, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	}), nil
 }
