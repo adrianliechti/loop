@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -46,6 +48,12 @@ type PortForward struct {
 
 	RemoteAddr string
 	RemotePort int
+
+	// BoundRemotePort, if non-nil, receives the port the remote side actually
+	// bound before the ready channel is closed. Combined with RemotePort 0 this
+	// lets sshd pick a free port instead of racing other sessions for a fixed
+	// one. The channel must be buffered; only remote forwards report a port.
+	BoundRemotePort chan<- int
 }
 
 type Option func(*Client)
@@ -125,17 +133,46 @@ func (c *Client) Run(ctx context.Context) error {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	client, err := ssh.Dial("tcp", c.addr, config)
+	// Everything below must unblock when ctx is cancelled: a half-open tunnel
+	// (local listener up, backend gone) otherwise wedges the TCP dial, the SSH
+	// handshake, or session setup forever — hanging shutdown paths that use a
+	// bounded context. Closing the underlying conn/client aborts them all.
+	dialer := &net.Dialer{Timeout: 15 * time.Second}
+
+	conn, err := dialer.DialContext(ctx, "tcp", c.addr)
 
 	if err != nil {
 		return err
 	}
 
+	stopConn := context.AfterFunc(ctx, func() { conn.Close() })
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, config)
+
+	stopConn()
+
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		return err
+	}
+
+	client := ssh.NewClient(sshConn, chans, reqs)
+
 	defer client.Close()
+
+	stop := context.AfterFunc(ctx, func() { client.Close() })
+	defer stop()
 
 	session, err := client.NewSession()
 
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		return err
 	}
 
@@ -146,7 +183,7 @@ func (c *Client) Run(ctx context.Context) error {
 	defer session.Close()
 
 	for _, p := range c.localPortForwards {
-		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
+		listener, err := net.Listen("tcp", net.JoinHostPort(p.LocalAddr, strconv.Itoa(p.LocalPort)))
 
 		if err != nil {
 			return err
@@ -166,6 +203,10 @@ func (c *Client) Run(ctx context.Context) error {
 
 		defer listener.Close()
 
+		if p.BoundRemotePort != nil {
+			p.BoundRemotePort <- listener.Addr().(*net.TCPAddr).Port
+		}
+
 		go tunnelConnections(listener, &net.Dialer{}, fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
 	}
 
@@ -175,7 +216,24 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	if c.command != "" {
-		return session.Run(c.command)
+		if err := session.Start(c.command); err != nil {
+			return err
+		}
+
+		done := make(chan error, 1)
+
+		go func() {
+			done <- session.Wait()
+		}()
+
+		select {
+		case err := <-done:
+			return err
+		case <-ctx.Done():
+			session.Close()
+			client.Close()
+			return ctx.Err()
+		}
 	}
 
 	<-ctx.Done()

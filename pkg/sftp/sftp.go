@@ -6,28 +6,76 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
+type Mount struct {
+	Source string
+	Target string
+}
+
+type rootMount struct {
+	root   *os.Root
+	target string
+}
+
 type Server struct {
 	addr string
 
-	// root is opened once in NewServer and never reassigned, so handlers can
-	// read it without synchronization. *os.Root itself is safe to Close
-	// concurrently with in-flight operations: pending ops complete or return
-	// fs.ErrClosed, and the fd is only released afterwards (no reuse race).
-	root *os.Root
+	// root and mounts are opened once in NewServer and never reassigned, so
+	// handlers can read them without synchronization. *os.Root itself is safe
+	// to Close concurrently with in-flight operations: pending ops complete or
+	// return fs.ErrClosed, and the fd is only released afterwards.
+	root   *os.Root
+	mounts []rootMount
+
+	closeOnce sync.Once
 
 	config *ssh.ServerConfig
 }
 
-func NewServer(addr, root string) (*Server, error) {
-	r, err := os.OpenRoot(root)
+// NewServer serves root at the SFTP top level, with each mount overlaid at
+// its target path. An empty root creates a mounts-only server: paths outside
+// the mounts report fs.ErrNotExist.
+func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
+	var r *os.Root
+	var openedMounts []rootMount
 
-	if err != nil {
-		return nil, err
+	closeAll := func() {
+		if r != nil {
+			r.Close()
+		}
+
+		for _, opened := range openedMounts {
+			opened.root.Close()
+		}
+	}
+
+	if root != "" {
+		opened, err := os.OpenRoot(root)
+
+		if err != nil {
+			return nil, err
+		}
+
+		r = opened
+	}
+
+	for _, mount := range mounts {
+		mountRoot, err := os.OpenRoot(mount.Source)
+
+		if err != nil {
+			closeAll()
+			return nil, err
+		}
+
+		openedMounts = append(openedMounts, rootMount{
+			root:   mountRoot,
+			target: toRelPath(mount.Target),
+		})
 	}
 
 	config := &ssh.ServerConfig{
@@ -39,7 +87,7 @@ func NewServer(addr, root string) (*Server, error) {
 	signer, err := generateSigner()
 
 	if err != nil {
-		r.Close()
+		closeAll()
 		return nil, err
 	}
 
@@ -48,21 +96,34 @@ func NewServer(addr, root string) (*Server, error) {
 	return &Server{
 		addr:   addr,
 		root:   r,
+		mounts: openedMounts,
 		config: config,
 	}, nil
 }
 
-// Close releases the root directory. In-flight handlers that touch the root
-// after Close will see fs.ErrClosed on their next operation and unwind on
-// their own; Close does not wait for them to do so, which avoids parking
-// shutdown on a long-lived sshfs (or similar) client. The listener used by
-// Serve is owned by the caller; close it separately to stop the accept loop.
+// Close releases the root directories. In-flight handlers that touch a root
+// after Close will see fs.ErrClosed on their next operation and unwind on their
+// own; Close does not wait for them to do so, which avoids parking shutdown on
+// a long-lived sshfs client. The listener used by Serve is owned by the caller;
+// close it separately to stop the accept loop.
 func (s *Server) Close() error {
-	if s.root == nil {
-		return nil
-	}
+	var result error
 
-	return s.root.Close()
+	// root and mounts stay assigned so concurrent HandleConn goroutines never
+	// observe them changing; closing is made idempotent via closeOnce instead.
+	s.closeOnce.Do(func() {
+		if s.root != nil {
+			result = s.root.Close()
+		}
+
+		for _, mount := range s.mounts {
+			if err := mount.root.Close(); result == nil {
+				result = err
+			}
+		}
+	})
+
+	return result
 }
 
 // Serve accepts connections on the supplied listener until it is closed.
@@ -126,13 +187,13 @@ func (s *Server) HandleConn(c net.Conn) error {
 			}
 		}(requests)
 
-		server := NewRequestServer(channel, s.root)
+		server := NewRequestServer(channel, s.root, s.mounts...)
+		err = server.Serve()
+		server.Close()
 
-		if err := server.Serve(); err != nil {
+		if err != nil {
 			return err
 		}
-
-		server.Close()
 	}
 
 	return nil
@@ -163,8 +224,8 @@ type RequestServer struct {
 	server *sftp.RequestServer
 }
 
-func NewRequestServer(session io.ReadWriteCloser, root *os.Root) *RequestServer {
-	h := &handler{root: root}
+func NewRequestServer(session io.ReadWriteCloser, root *os.Root, mounts ...rootMount) *RequestServer {
+	h := &handler{root: root, mounts: mounts}
 
 	s := sftp.NewRequestServer(session, sftp.Handlers{
 		FileGet:  h,

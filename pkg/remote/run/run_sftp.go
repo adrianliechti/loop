@@ -10,10 +10,11 @@ import (
 	"github.com/adrianliechti/loop/pkg/sftp"
 )
 
-func startServer(ctx context.Context, port int, path string) error {
+func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	s, err := sftp.NewServer(addr, path)
+	// Mounts-only server (empty root): only the volume targets exist.
+	s, err := sftp.NewServer(addr, "", mounts...)
 
 	if err != nil {
 		return err

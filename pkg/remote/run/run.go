@@ -2,7 +2,6 @@ package run
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/pkg/docker"
 	"github.com/adrianliechti/loop/pkg/kubernetes"
+	"github.com/adrianliechti/loop/pkg/sftp"
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 
@@ -71,7 +71,7 @@ type RunOptions struct {
 
 	SyncMode SyncMode
 
-	OnPod    func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
+	OnCreate func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnReady  func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 	OnDelete func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 }
@@ -96,35 +96,31 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 		options.Image = "ghcr.io/adrianliechti/loop-tunnel"
 	}
 
-	if options.SyncMode == SyncModeMount && len(container.Volumes) > 1 {
-		return errors.New("mount mode currently only supports a single volume")
-	}
-
 	pod := templatePod(container, options)
 
-	if options.OnPod != nil {
-		if err := options.OnPod(ctx, client, pod); err != nil {
+	if options.OnCreate != nil {
+		if err := options.OnCreate(ctx, client, pod); err != nil {
 			return err
 		}
 	}
 
-	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
+	cli.Infof("★ Creating container (%s/%s)...", pod.Namespace, pod.Name)
 
 	defer func() {
-		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
-		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+		cli.Infof("★ Removing container (%s/%s)...", pod.Namespace, pod.Name)
+		deletePod(context.Background(), client, pod.Namespace, pod.Name)
 
 		if options.OnDelete != nil {
 			options.OnDelete(ctx, client, pod)
 		}
 	}()
 
-	if err := startPod(ctx, client, pod); err != nil {
+	if err := createPod(ctx, client, pod); err != nil {
 		return err
 	}
 
 	if options.SyncMode != SyncModeMount {
-		cli.Infof("★ copying volumes data...")
+		cli.Infof("★ Copying volumes data...")
 
 		if err := copyVolumes(ctx, client, pod.Namespace, pod.Name, container.Volumes); err != nil {
 			return err
@@ -270,7 +266,7 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 	return pod
 }
 
-func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
+func createPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
 	pod, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 
 	if err != nil {
@@ -284,7 +280,7 @@ func startPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) er
 	return nil
 }
 
-func stopPod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
+func deletePod(ctx context.Context, client kubernetes.Client, namespace, name string) error {
 	if err := client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		GracePeriodSeconds: kubernetes.Ptr(int64(0)),
 	}); err != nil && !kubernetes.IsNotFound(err) {
@@ -348,33 +344,41 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 	}
 
 	if len(container.Volumes) > 0 && options.SyncMode == SyncModeMount {
-		volume := container.Volumes[0]
+		var mounts []sftp.Mount
+		var mountCommands []string
 
-		sftpport, err := system.FreePort(0)
+		for _, volume := range container.Volumes {
+			targetPath := path.Join("/data", volume.Target)
+			sourcePath := path.Clean("/" + volume.Target)
+
+			mounts = append(mounts, sftp.Mount{
+				Source: volume.Source,
+				Target: sourcePath,
+			})
+
+			mountCommands = append(mountCommands, fmt.Sprintf(
+				"mkdir -p %s && sshfs -o allow_other -p 2222 root@localhost:%s %s",
+				shellQuote(targetPath),
+				shellQuote(sourcePath),
+				shellQuote(targetPath),
+			))
+		}
+
+		sftpPort, err := system.FreePort(0)
 
 		if err != nil {
 			return err
 		}
 
-		if err := startServer(ctx, sftpport, volume.Source); err != nil {
+		if err := startServer(ctx, sftpPort, mounts); err != nil {
 			return err
 		}
 
-		targetPath := path.Join("/data", volume.Target)
 		marker := "/tmp/loop-mounted"
-
-		// Shell-quote the target path: it is user-supplied (via `-v src:tgt`)
-		// and gets concatenated into a shell command on the remote side.
-		// Mounting succeeds first, then the marker is touched — so the marker
-		// is also the signal that sshfs has actually mounted (see below).
-		cmd := fmt.Sprintf(
-			"sshfs -o allow_other -p 2222 root@localhost:/ %s && touch %s && /bin/sleep infinity",
-			shellQuote(targetPath),
-			shellQuote(marker),
-		)
+		cmd := strings.Join(mountCommands, " && ") + " && touch " + shellQuote(marker) + " && /bin/sleep infinity"
 
 		c := ssh.New(addr,
-			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpport, RemotePort: 2222}),
+			ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 2222}),
 			ssh.WithCommand(cmd),
 			ssh.WithStderr(os.Stderr),
 			ssh.WithStdout(os.Stdout),
@@ -412,7 +416,8 @@ func connectTunnel(ctx context.Context, client kubernetes.Client, pod *corev1.Po
 }
 
 // shellQuote single-quotes s for safe inclusion in a /bin/sh command line.
-// Single quotes inside s are escaped as '\''.
+// Embedded single quotes are escaped by ending the quoted string,
+// emitting an escaped quote, and reopening it.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

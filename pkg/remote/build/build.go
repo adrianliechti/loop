@@ -165,10 +165,10 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		}
 	}
 
-	cli.Infof("★ creating container (%s/%s)...", pod.Namespace, pod.Name)
+	cli.Infof("★ Creating container (%s/%s)...", pod.Namespace, pod.Name)
 
 	defer func() {
-		cli.Infof("★ removing container (%s/%s)...", pod.Namespace, pod.Name)
+		cli.Infof("★ Removing container (%s/%s)...", pod.Namespace, pod.Name)
 		stopPod(context.Background(), client, pod.Namespace, pod.Name)
 
 		if options.OnDelete != nil {
@@ -180,7 +180,7 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		return err
 	}
 
-	cli.Infof("★ copying build context...")
+	cli.Infof("★ Copying build context...")
 
 	builderPath := "/data/build-" + uuid.NewString()[0:7]
 	builderContext := builderPath
