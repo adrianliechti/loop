@@ -2,7 +2,6 @@ package ssh
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -191,11 +190,11 @@ func (c *Client) Run(ctx context.Context) error {
 
 		defer listener.Close()
 
-		go tunnelConnections(listener, client, fmt.Sprintf("%s:%d", p.RemoteAddr, p.RemotePort))
+		go tunnelConnections(listener, client, net.JoinHostPort(p.RemoteAddr, strconv.Itoa(p.RemotePort)))
 	}
 
 	for _, p := range c.remotePortForwards {
-		listener, err := client.Listen("tcp", fmt.Sprintf("%s:%d", p.RemoteAddr, p.RemotePort))
+		listener, err := client.Listen("tcp", net.JoinHostPort(p.RemoteAddr, strconv.Itoa(p.RemotePort)))
 
 		if err != nil {
 			return err
@@ -207,7 +206,7 @@ func (c *Client) Run(ctx context.Context) error {
 			p.BoundRemotePort <- listener.Addr().(*net.TCPAddr).Port
 		}
 
-		go tunnelConnections(listener, &net.Dialer{}, fmt.Sprintf("%s:%d", p.LocalAddr, p.LocalPort))
+		go tunnelConnections(listener, &net.Dialer{}, net.JoinHostPort(p.LocalAddr, strconv.Itoa(p.LocalPort)))
 	}
 
 	// All port forwards are bound at this point.

@@ -12,13 +12,12 @@ import (
 	"github.com/adrianliechti/loop/app"
 	"github.com/adrianliechti/loop/app/bridge"
 	"github.com/adrianliechti/loop/app/build"
-	"github.com/adrianliechti/loop/app/code"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/docker"
-	"github.com/adrianliechti/loop/app/expose"
 	"github.com/adrianliechti/loop/app/granite"
 	"github.com/adrianliechti/loop/app/prism"
 	"github.com/adrianliechti/loop/app/run"
+	"github.com/adrianliechti/loop/app/tunnel"
 
 	"github.com/lmittmann/tint"
 )
@@ -58,11 +57,10 @@ func initApp() cli.Command {
 			bridge.Command,
 
 			connect.Command,
-			expose.Command,
+			tunnel.Command,
 
 			run.Command,
 
-			code.Command,
 			prism.Command,
 			granite.Command,
 
