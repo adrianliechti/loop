@@ -48,28 +48,49 @@ func toRelPath(p string) string {
 	return p
 }
 
-func (h *handler) resolve(p string) (*os.Root, string) {
+// resolve picks the mount with the longest matching target so that nested
+// targets (e.g. /app and /app/node_modules) route to the right source
+// regardless of registration order. Later mounts win ties. On a mounts-only
+// server (nil base root), paths outside every mount return fs.ErrNotExist.
+func (h *handler) resolve(p string) (*os.Root, string, error) {
 	name := toRelPath(p)
 
+	root := h.root
+	rel := name
+	best := -1
+
 	for _, mount := range h.mounts {
-		if mount.target == "." {
-			return mount.root, name
-		}
+		switch {
+		case mount.target == ".":
+			if best <= 0 {
+				root, rel, best = mount.root, name, 0
+			}
 
-		if name == mount.target {
-			return mount.root, "."
-		}
+		case name == mount.target:
+			if len(mount.target) >= best {
+				root, rel, best = mount.root, ".", len(mount.target)
+			}
 
-		if strings.HasPrefix(name, mount.target+"/") {
-			return mount.root, name[len(mount.target)+1:]
+		case strings.HasPrefix(name, mount.target+"/"):
+			if len(mount.target) >= best {
+				root, rel, best = mount.root, name[len(mount.target)+1:], len(mount.target)
+			}
 		}
 	}
 
-	return h.root, name
+	if root == nil {
+		return nil, "", fs.ErrNotExist
+	}
+
+	return root, rel, nil
 }
 
 const (
 	perm = 0o644
+
+	// Directories need the execute bit: 0o644 would make them impossible to
+	// traverse or create files in, breaking every nested mkdir from sshfs.
+	dirPerm = 0o755
 
 	methodList = "List"
 	methodStat = "Stat"
@@ -89,7 +110,11 @@ func (h *handler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	root, name := h.resolve(r.Filepath)
+	root, name, err := h.resolve(r.Filepath)
+
+	if err != nil {
+		return nil, err
+	}
 
 	switch r.Method {
 	case methodList:
@@ -141,7 +166,12 @@ func (h *handler) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 		return nil, os.ErrInvalid
 	}
 
-	root, name := h.resolve(r.Filepath)
+	root, name, err := h.resolve(r.Filepath)
+
+	if err != nil {
+		return nil, err
+	}
+
 	info, err := root.Lstat(name)
 
 	if err != nil {
@@ -153,7 +183,12 @@ func (h *handler) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 
 // Methods: Readlink
 func (h *handler) Readlink(p string) (string, error) {
-	root, name := h.resolve(p)
+	root, name, err := h.resolve(p)
+
+	if err != nil {
+		return "", err
+	}
+
 	return root.Readlink(name)
 }
 
@@ -201,7 +236,12 @@ func (h *handler) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
 		flag |= os.O_WRONLY
 	}
 
-	root, name := h.resolve(r.Filepath)
+	root, name, err := h.resolve(r.Filepath)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return root.OpenFile(name, flag, perm)
 }
 
@@ -211,7 +251,11 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 		return os.ErrInvalid
 	}
 
-	root, name := h.resolve(r.Filepath)
+	root, name, err := h.resolve(r.Filepath)
+
+	if err != nil {
+		return err
+	}
 
 	switch r.Method {
 	case methodSetStat:
@@ -266,14 +310,18 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 		return root.Remove(name)
 
 	case methodMkdir:
-		return root.MkdirAll(name, perm)
+		return root.MkdirAll(name, dirPerm)
 
 	case methodLink:
 		if r.Target == "" {
 			return os.ErrInvalid
 		}
 
-		targetRoot, targetName := h.resolve(r.Target)
+		targetRoot, targetName, err := h.resolve(r.Target)
+
+		if err != nil {
+			return err
+		}
 
 		if targetRoot != root {
 			return fmt.Errorf("hard links across mounts are not supported")
@@ -286,7 +334,11 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 			return os.ErrInvalid
 		}
 
-		linkRoot, linkName := h.resolve(r.Target)
+		linkRoot, linkName, err := h.resolve(r.Target)
+
+		if err != nil {
+			return err
+		}
 
 		// Per pkg/sftp convention: r.Filepath is the symlink target string,
 		// r.Target is the linkpath. The target string is kept as-is; *os.Root
@@ -317,8 +369,17 @@ func (h *handler) PosixRename(r *sftp.Request) error {
 		return os.ErrInvalid
 	}
 
-	root, name := h.resolve(r.Filepath)
-	targetRoot, targetName := h.resolve(r.Target)
+	root, name, err := h.resolve(r.Filepath)
+
+	if err != nil {
+		return err
+	}
+
+	targetRoot, targetName, err := h.resolve(r.Target)
+
+	if err != nil {
+		return err
+	}
 
 	if targetRoot != root {
 		return fmt.Errorf("renames across mounts are not supported")

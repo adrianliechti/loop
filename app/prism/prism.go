@@ -3,6 +3,7 @@ package prism
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/adrianliechti/go-cli"
@@ -30,11 +31,17 @@ var Command = &cli.Command{
 		url := fmt.Sprintf("http://localhost:%d", port)
 		addr := fmt.Sprintf("localhost:%d", port)
 
+		l, err := net.Listen("tcp", addr)
+
+		if err != nil {
+			return err
+		}
+
 		time.AfterFunc(500*time.Millisecond, func() {
 			cli.Infof("Prism on %s", url)
 			cli.OpenURL(url)
 		})
 
-		return srv.ListenAndServe(ctx, addr)
+		return srv.Serve(ctx, l)
 	},
 }

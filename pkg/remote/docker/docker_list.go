@@ -22,6 +22,12 @@ func List(ctx context.Context, client kubernetes.Client, options *ListOptions) (
 		options = new(ListOptions)
 	}
 
+	// Default like Connect/Delete do, so List never shows daemons in other
+	// namespaces that those commands would then fail to find.
+	if options.Namespace == "" {
+		options.Namespace = client.Namespace()
+	}
+
 	pods, err := client.CoreV1().Pods(options.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: resourceLabelSelector,
 	})

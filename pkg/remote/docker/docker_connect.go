@@ -2,8 +2,8 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -14,6 +14,10 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/remotemount"
 	"github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/system"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type ConnectOptions struct {
@@ -31,6 +35,16 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 
 	cli.Infof("★ Connecting to Docker instance '%s'", name)
 
+	// Fail fast on unknown names: waiting for a pod of a daemon that was never
+	// created would block forever.
+	if _, err := client.AppsV1().StatefulSets(options.Namespace).Get(ctx, resourceName(name), metav1.GetOptions{}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("docker instance %q not found in namespace %q", name, options.Namespace)
+		}
+
+		return err
+	}
+
 	podName := resourceName(name) + "-0"
 
 	if _, err := client.WaitForPod(ctx, options.Namespace, podName); err != nil {
@@ -40,19 +54,19 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	proxyPort, err := pickPort(2375)
+	proxyPort, err := system.FreePort(2375)
 
 	if err != nil {
 		return err
 	}
 
-	daemonPort, err := pickPort(0)
+	daemonPort, err := system.FreePort(0)
 
 	if err != nil {
 		return err
 	}
 
-	sshPort, err := pickPort(0)
+	sshPort, err := system.FreePort(0)
 
 	if err != nil {
 		return err
@@ -108,7 +122,11 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	}
 
 	docker := "docker"
-	loopContext := "loop-" + name
+
+	// The context name carries the proxy port so concurrent sessions against
+	// the same instance each own a distinct context instead of force-removing
+	// each other's.
+	loopContext := fmt.Sprintf("loop-%s-%d", name, proxyPort)
 
 	val, err := exec.Command(docker, "context", "show").Output()
 
@@ -132,12 +150,6 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 
 	cli.Info("★ Setting Docker context to '" + loopContext + "'")
 
-	if currentContext == loopContext {
-		runDocker(docker, "context", "use", "default")
-	}
-
-	runDocker(docker, "context", "rm", "-f", loopContext)
-
 	if err := runDocker(docker, "context", "create", loopContext, "--docker", fmt.Sprintf("host=tcp://127.0.0.1:%d", proxyPort)); err != nil {
 		return err
 	}
@@ -156,27 +168,28 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	case err := <-proxyDone:
 		return errOrContext(ctx, err)
 	case <-ctx.Done():
-		return nil
+		// A failing goroutine sends its error before cancelling ctx, so both
+		// cases may be ready and Go picks randomly. Drain the channels so a
+		// real failure isn't reported as a clean shutdown.
+		return drainErrors(sshForwardDone, daemonDone, proxyDone)
 	}
 }
 
-// pickPort returns a free local TCP port, preferring `preference` if available.
-// There is an inherent TOCTOU window between picking and binding; callers must
-// tolerate the chosen port being claimed by another process before they bind.
-func pickPort(preference int) (int, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preference))
-
-	if err != nil && preference != 0 {
-		listener, err = net.Listen("tcp", "127.0.0.1:0")
+// drainErrors returns the first real error already buffered in the given
+// channels, ignoring plain cancellation. Non-blocking: on a user-initiated
+// shutdown the goroutines may not have reported (anything) yet.
+func drainErrors(channels ...<-chan error) error {
+	for _, ch := range channels {
+		select {
+		case err := <-ch:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				return err
+			}
+		default:
+		}
 	}
 
-	if err != nil {
-		return 0, err
-	}
-
-	defer listener.Close()
-
-	return listener.Addr().(*net.TCPAddr).Port, nil
+	return nil
 }
 
 func waitForReady(ctx context.Context, ready <-chan struct{}, done <-chan error) error {

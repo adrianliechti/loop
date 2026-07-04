@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/adrianliechti/go-cli"
 
@@ -48,13 +49,23 @@ var CommandCreate = &cli.Command{
 			name = cli.MustInput("Name", uuid.NewString()[:5])
 		}
 
-		if namespace == "" {
-			namespace = client.Namespace()
+		resourceCPU, err := resource.ParseQuantity(cmd.String("cpu"))
+
+		if err != nil {
+			return fmt.Errorf("invalid cpu value %q: %w", cmd.String("cpu"), err)
 		}
 
-		resourceCPU := resource.MustParse(cmd.String("cpu"))
-		resourceMemory := resource.MustParse(cmd.String("memory"))
-		storageSize := resource.MustParse(cmd.String("storage"))
+		resourceMemory, err := resource.ParseQuantity(cmd.String("memory"))
+
+		if err != nil {
+			return fmt.Errorf("invalid memory value %q: %w", cmd.String("memory"), err)
+		}
+
+		storageSize, err := resource.ParseQuantity(cmd.String("storage"))
+
+		if err != nil {
+			return fmt.Errorf("invalid storage value %q: %w", cmd.String("storage"), err)
+		}
 
 		return docker.Create(ctx, client, &docker.CreateOptions{
 			Name:      name,

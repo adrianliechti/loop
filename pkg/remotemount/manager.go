@@ -2,6 +2,7 @@ package remotemount
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -29,36 +30,95 @@ type Manager struct {
 	sshAddr    string
 	remoteRoot string
 
-	mu             sync.Mutex
-	mounts         map[string]string
-	ports          map[string]struct{}
-	cancels        []context.CancelFunc
-	nextRemotePort int
+	mu     sync.Mutex
+	mounts map[string]*mountState
+	ports  map[string]struct{}
+}
+
+// mountState tracks one localRoot's mount attempt so concurrent Resolve calls
+// share a single attempt without holding the manager lock across remote I/O.
+type mountState struct {
+	ready chan struct{}
+
+	id         string
+	marker     string
+	remoteRoot string
+	err        error
+
+	// cancel stops the mount's SFTP server and SSH sessions. On success it is
+	// never called directly: the sessions must outlive establish() and end
+	// with m.ctx, their parent.
+	cancel context.CancelFunc
 }
 
 func NewManager(ctx context.Context, sshAddr, remoteRoot string) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &Manager{
-		ctx:            ctx,
-		cancel:         cancel,
-		sshAddr:        sshAddr,
-		remoteRoot:     remoteRoot,
-		mounts:         map[string]string{},
-		ports:          map[string]struct{}{},
-		nextRemotePort: 22000,
+		ctx:        ctx,
+		cancel:     cancel,
+		sshAddr:    sshAddr,
+		remoteRoot: remoteRoot,
+		mounts:     map[string]*mountState{},
+		ports:      map[string]struct{}{},
 	}
 }
 
 func (m *Manager) Close() {
+	m.mu.Lock()
+
+	var states []*mountState
+
+	for _, state := range m.mounts {
+		states = append(states, state)
+	}
+
+	m.mu.Unlock()
+
 	m.cancel()
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Best effort: detach the sshfs mounts and remove the readiness markers on
+	// the remote side so a later session doesn't inherit broken mountpoints.
+	// The directories are left in place: containers created in this session
+	// keep a valid (if empty) bind source across daemon restarts. The tunnel
+	// may already be gone, hence the own context and ignored error.
+	var parts []string
 
-	for _, cancel := range m.cancels {
-		cancel()
+	for _, state := range states {
+		select {
+		case <-state.ready:
+		default:
+			continue
+		}
+
+		if state.err != nil {
+			continue
+		}
+
+		parts = append(parts, cleanupCommand(state))
 	}
+
+	if len(parts) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client := ssh.New(m.sshAddr,
+		ssh.WithCommand(strings.Join(parts, "; ")+"; true"),
+		ssh.WithStderr(io.Discard),
+		ssh.WithStdout(io.Discard),
+	)
+
+	client.Run(ctx)
+}
+
+func cleanupCommand(state *mountState) string {
+	dir := shellQuote(state.remoteRoot)
+	marker := shellQuote(state.marker)
+
+	return fmt.Sprintf("fusermount -uz %[1]s 2>/dev/null; umount -l %[1]s 2>/dev/null; rm -f %[2]s", dir, marker)
 }
 
 func (m *Manager) Resolve(ctx context.Context, source string) (string, error) {
@@ -75,11 +135,21 @@ func (m *Manager) Resolve(ctx context.Context, source string) (string, error) {
 	info, err := os.Stat(abs)
 
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("bind source %q does not exist on the local machine", source)
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
 		}
 
-		return "", err
+		// Match dockerd's -v semantics: a missing bind source is created as a
+		// directory instead of failing the container create.
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return "", fmt.Errorf("bind source %q does not exist and could not be created: %w", source, err)
+		}
+
+		info, err = os.Stat(abs)
+
+		if err != nil {
+			return "", err
+		}
 	}
 
 	localRoot := abs
@@ -108,7 +178,10 @@ func (m *Manager) Resolve(ctx context.Context, source string) (string, error) {
 }
 
 func (m *Manager) ForwardPort(ctx context.Context, localAddr string, localPort, remotePort int) error {
-	if localAddr == "" || localAddr == "0.0.0.0" || localAddr == "::" {
+	// An unset host IP defaults to loopback; explicit wildcard or IPv6
+	// requests are honored so `-p 0.0.0.0:x:y` is reachable from the LAN as
+	// docker reports it.
+	if localAddr == "" {
 		localAddr = "127.0.0.1"
 	}
 
@@ -133,8 +206,12 @@ func (m *Manager) ForwardPort(ctx context.Context, localAddr string, localPort, 
 		ssh.WithReady(ready),
 	)
 
+	// The goroutine owns the key's lifecycle: it unregisters the port when the
+	// forward ends, whatever the cause. Removing it earlier would let a retry
+	// re-register while the old listener is still bound.
 	go func() {
 		err := client.Run(portCtx)
+		cancel()
 
 		m.mu.Lock()
 		delete(m.ports, key)
@@ -145,16 +222,8 @@ func (m *Manager) ForwardPort(ctx context.Context, localAddr string, localPort, 
 
 	select {
 	case <-ready:
-		m.mu.Lock()
-		m.cancels = append(m.cancels, cancel)
-		m.mu.Unlock()
 		return nil
 	case err := <-done:
-		cancel()
-		m.mu.Lock()
-		delete(m.ports, key)
-		m.mu.Unlock()
-
 		if err == nil {
 			return portCtx.Err()
 		}
@@ -162,25 +231,58 @@ func (m *Manager) ForwardPort(ctx context.Context, localAddr string, localPort, 
 		return err
 	case <-ctx.Done():
 		cancel()
-		m.mu.Lock()
-		delete(m.ports, key)
-		m.mu.Unlock()
 		return ctx.Err()
 	}
 }
 
 func (m *Manager) mount(ctx context.Context, localRoot string) (string, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
-	if remoteRoot, ok := m.mounts[localRoot]; ok {
-		return remoteRoot, nil
+	if state, ok := m.mounts[localRoot]; ok {
+		m.mu.Unlock()
+
+		select {
+		case <-state.ready:
+			return state.remoteRoot, state.err
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-m.ctx.Done():
+			return "", m.ctx.Err()
+		}
 	}
 
+	state := &mountState{ready: make(chan struct{})}
+	m.mounts[localRoot] = state
+	m.mu.Unlock()
+
+	state.remoteRoot, state.err = m.establish(ctx, localRoot, state)
+
+	if state.err != nil {
+		// Drop the failed entry so a retry starts a fresh attempt instead of
+		// reusing a poisoned one.
+		m.mu.Lock()
+		delete(m.mounts, localRoot)
+		m.mu.Unlock()
+	}
+
+	close(state.ready)
+
+	return state.remoteRoot, state.err
+}
+
+func (m *Manager) establish(ctx context.Context, localRoot string, state *mountState) (string, error) {
+	// The remote directory is derived from the local path only, so the same
+	// bind source maps to the same /data path across sessions and containers
+	// created earlier keep a resolvable (if unmounted) source after restarts.
 	sum := sha256.Sum256([]byte(localRoot))
-	id := hex.EncodeToString(sum[:])[:16]
-	remoteRoot := path.Join(m.remoteRoot, id)
-	marker := path.Join("/tmp", "loop-mounted-"+id)
+	state.id = hex.EncodeToString(sum[:])[:16]
+	remoteRoot := path.Join(m.remoteRoot, state.id)
+
+	// The readiness marker is unique per attempt: a marker left behind by a
+	// crashed session or a failed try must never satisfy a new wait.
+	nonce := make([]byte, 4)
+	rand.Read(nonce)
+	state.marker = path.Join("/tmp", "loop-mounted-"+state.id+"-"+hex.EncodeToString(nonce))
 
 	sftpPort, err := system.FreePort(0)
 
@@ -189,25 +291,62 @@ func (m *Manager) mount(ctx context.Context, localRoot string) (string, error) {
 	}
 
 	mountCtx, cancel := context.WithCancel(m.ctx)
+	state.cancel = cancel
 
 	if err := startSFTPServer(mountCtx, sftpPort, localRoot); err != nil {
 		cancel()
 		return "", err
 	}
 
-	remotePort := m.nextRemotePort
-	m.nextRemotePort++
+	// Let the remote sshd assign the reverse-forward port so concurrent
+	// sessions attached to the same daemon never race for a fixed port.
+	bound := make(chan int, 1)
+	forwardReady := make(chan struct{})
+	forwardDone := make(chan error, 1)
 
+	forward := ssh.New(m.sshAddr,
+		ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: 0, BoundRemotePort: bound}),
+		ssh.WithReady(forwardReady),
+	)
+
+	go func() {
+		err := forward.Run(mountCtx)
+
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Println("could not maintain remote mount tunnel", "path", localRoot, "error", err)
+		}
+
+		forwardDone <- err
+	}()
+
+	select {
+	case <-forwardReady:
+	case err := <-forwardDone:
+		cancel()
+
+		if err == nil {
+			err = mountCtx.Err()
+		}
+
+		return "", err
+	case <-ctx.Done():
+		cancel()
+		return "", ctx.Err()
+	}
+
+	remotePort := <-bound
+
+	// Detach any stale mountpoint first: a crashed session can leave a
+	// disconnected sshfs mount on the (stable) directory that would otherwise
+	// make every new mount fail with "Transport endpoint is not connected".
 	cmd := fmt.Sprintf(
-		"mkdir -p %s && sshfs -o allow_other -p %d root@localhost:/ %s && touch %s && /bin/sleep infinity",
+		"fusermount -uz %[1]s 2>/dev/null; umount -l %[1]s 2>/dev/null; mkdir -p %[1]s && sshfs -o allow_other -p %[2]d root@localhost:/ %[1]s && touch %[3]s && /bin/sleep infinity",
 		shellQuote(remoteRoot),
 		remotePort,
-		shellQuote(remoteRoot),
-		shellQuote(marker),
+		shellQuote(state.marker),
 	)
 
 	client := ssh.New(m.sshAddr,
-		ssh.WithRemotePortForward(ssh.PortForward{LocalPort: sftpPort, RemotePort: remotePort}),
 		ssh.WithCommand(cmd),
 		ssh.WithStderr(io.Discard),
 		ssh.WithStdout(io.Discard),
@@ -219,40 +358,44 @@ func (m *Manager) mount(ctx context.Context, localRoot string) (string, error) {
 		}
 	}()
 
-	if err := m.waitForMarker(ctx, marker); err != nil {
+	if err := m.waitForMarker(ctx, state.marker); err != nil {
 		cancel()
+
+		// Best effort: unmount whatever the failed attempt left behind so a
+		// retry (or the next session) starts from a clean mountpoint.
+		state.remoteRoot = remoteRoot
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+
+		cleanup := ssh.New(m.sshAddr,
+			ssh.WithCommand(cleanupCommand(state)+"; true"),
+			ssh.WithStderr(io.Discard),
+			ssh.WithStdout(io.Discard),
+		)
+
+		cleanup.Run(cleanupCtx)
+
 		return "", err
 	}
 
-	m.cancels = append(m.cancels, cancel)
-	m.mounts[localRoot] = remoteRoot
 	return remoteRoot, nil
 }
 
+// waitForMarker polls for the readiness marker with a single remote session
+// instead of dialing a fresh SSH connection every tick.
 func (m *Manager) waitForMarker(ctx context.Context, marker string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	cmd := fmt.Sprintf("i=0; while [ $i -lt 60 ]; do [ -f %s ] && exit 0; i=$((i+1)); sleep 0.5; done; exit 1", shellQuote(marker))
 
-	cmd := "test -f " + shellQuote(marker)
+	client := ssh.New(m.sshAddr, ssh.WithCommand(cmd), ssh.WithStderr(io.Discard), ssh.WithStdout(io.Discard))
 
-	for {
-		client := ssh.New(m.sshAddr, ssh.WithCommand(cmd), ssh.WithStderr(io.Discard), ssh.WithStdout(io.Discard))
-
-		if err := client.Run(ctx); err == nil {
-			return nil
-		}
-
-		select {
-		case <-ticker.C:
-		case <-m.ctx.Done():
-			return m.ctx.Err()
-		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for remote mount %q: %w", marker, ctx.Err())
-		}
+	if err := client.Run(ctx); err != nil {
+		return fmt.Errorf("timed out waiting for remote mount %q: %w", marker, err)
 	}
+
+	return nil
 }
 
 func startSFTPServer(ctx context.Context, port int, root string) error {

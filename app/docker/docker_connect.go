@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"errors"
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
@@ -23,30 +22,14 @@ var CommandConnect = &cli.Command{
 		name := cmd.Args().Get(0)
 		namespace := app.Namespace(ctx, cmd)
 
-		if namespace == "" {
-			namespace = client.Namespace()
-		}
-
 		if name == "" {
-			candidates, err := docker.List(ctx, client, &docker.ListOptions{
-				Namespace: namespace,
-			})
+			selected, err := selectInstance(ctx, client, namespace)
 
 			if err != nil {
 				return err
 			}
 
-			if len(candidates) == 0 {
-				return errors.New("no Docker instances found")
-			}
-
-			var items []string
-
-			for _, c := range candidates {
-				items = append(items, c.Name)
-			}
-
-			_, name = cli.MustSelect("Daemon", items)
+			name = selected
 		}
 
 		return docker.Connect(ctx, client, name, &docker.ConnectOptions{

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/adrianliechti/loop/pkg/system"
 )
 
 type Resolver interface {
@@ -22,6 +26,13 @@ type Resolver interface {
 
 type PortForwarder interface {
 	ForwardPort(ctx context.Context, localAddr string, localPort, remotePort int) error
+}
+
+// ImageInspector reports the ports an image EXPOSEs. `docker run -P` sends no
+// ExposedPorts in the create payload for image-declared ports, so the proxy
+// has to ask the daemon to know what to publish.
+type ImageInspector interface {
+	ExposedPorts(ctx context.Context, image string) ([]string, error)
 }
 
 func Serve(ctx context.Context, addr, target string, resolver Resolver, ready chan<- struct{}) error {
@@ -41,10 +52,15 @@ func Serve(ctx context.Context, addr, target string, resolver Resolver, ready ch
 		close(ready)
 	}
 
+	images := &daemonImages{
+		base:   strings.TrimSuffix(target, "/"),
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && isContainerCreate(r.URL.Path) {
-			if err := rewriteCreateRequest(r, resolver); err != nil {
+			if err := rewriteCreateRequest(r, resolver, images); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
@@ -99,7 +115,7 @@ func isAPIVersion(part string) bool {
 	return true
 }
 
-func rewriteCreateRequest(r *http.Request, resolver Resolver) error {
+func rewriteCreateRequest(r *http.Request, resolver Resolver, images ImageInspector) error {
 	data, err := io.ReadAll(r.Body)
 
 	if err != nil {
@@ -108,7 +124,7 @@ func rewriteCreateRequest(r *http.Request, resolver Resolver) error {
 
 	r.Body.Close()
 
-	rewritten, err := RewriteCreatePayload(r.Context(), data, resolver)
+	rewritten, err := RewriteCreatePayload(r.Context(), data, resolver, images)
 
 	if err != nil {
 		return err
@@ -121,7 +137,7 @@ func rewriteCreateRequest(r *http.Request, resolver Resolver) error {
 	return nil
 }
 
-func RewriteCreatePayload(ctx context.Context, data []byte, resolver Resolver) ([]byte, error) {
+func RewriteCreatePayload(ctx context.Context, data []byte, resolver Resolver, images ImageInspector) ([]byte, error) {
 	var payload map[string]any
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -146,7 +162,7 @@ func RewriteCreatePayload(ctx context.Context, data []byte, resolver Resolver) (
 	}
 
 	if forwarder, ok := resolver.(PortForwarder); ok {
-		if err := forwardPorts(ctx, hostConfig, forwarder); err != nil {
+		if err := forwardPorts(ctx, payload, hostConfig, forwarder, images); err != nil {
 			return nil, err
 		}
 	}
@@ -269,14 +285,12 @@ func isLocalVolumeSource(source string) bool {
 }
 
 func resolveSource(ctx context.Context, resolver Resolver, source string) (string, error) {
+	// The Docker CLI resolves relative paths before sending them and the
+	// daemon rejects them. Resolving here would use the proxy's working
+	// directory — not the client's — and silently mount the wrong directory,
+	// so mirror the daemon and reject instead.
 	if !isAbsLocalPath(source) {
-		var err error
-
-		source, err = filepath.Abs(source)
-
-		if err != nil {
-			return "", err
-		}
+		return "", fmt.Errorf("relative bind source %q is not supported: use an absolute path", source)
 	}
 
 	return resolver.Resolve(ctx, source)
@@ -302,17 +316,55 @@ func isPathSeparator(b byte) bool {
 	return b == '/' || b == '\\'
 }
 
-func forwardPorts(ctx context.Context, hostConfig map[string]any, forwarder PortForwarder) error {
-	raw, ok := hostConfig["PortBindings"]
+func forwardPorts(ctx context.Context, payload, hostConfig map[string]any, forwarder PortForwarder, images ImageInspector) error {
+	bindings, _ := hostConfig["PortBindings"].(map[string]any)
 
-	if !ok || raw == nil {
-		return nil
-	}
+	// `docker run -P` publishes every exposed port on a daemon-assigned random
+	// port, which would only exist inside the remote pod. Synthesize explicit
+	// bindings instead so the ports get concrete, forwardable host ports
+	// below. Ports declared only via the image's EXPOSE are not in the create
+	// payload, so those are fetched from the daemon's image config. Only
+	// forwardable (TCP) ports are synthesized: publishing a UDP port the
+	// SSH tunnel cannot carry would just report an unreachable binding.
+	if publishAll, _ := hostConfig["PublishAllPorts"].(bool); publishAll {
+		if bindings == nil {
+			bindings = map[string]any{}
+		}
 
-	bindings, ok := raw.(map[string]any)
+		exposed := map[string]struct{}{}
 
-	if !ok {
-		return nil
+		if payloadPorts, ok := payload["ExposedPorts"].(map[string]any); ok {
+			for port := range payloadPorts {
+				exposed[port] = struct{}{}
+			}
+		}
+
+		if images != nil {
+			if image, _ := payload["Image"].(string); image != "" {
+				imagePorts, err := images.ExposedPorts(ctx, image)
+
+				if err != nil {
+					return fmt.Errorf("cannot determine exposed ports of %q for --publish-all: %w", image, err)
+				}
+
+				for _, port := range imagePorts {
+					exposed[port] = struct{}{}
+				}
+			}
+		}
+
+		for port := range exposed {
+			if _, ok := parseContainerPort(port); !ok {
+				continue
+			}
+
+			if _, ok := bindings[port]; !ok {
+				bindings[port] = []any{map[string]any{"HostIp": "", "HostPort": ""}}
+			}
+		}
+
+		hostConfig["PublishAllPorts"] = false
+		hostConfig["PortBindings"] = bindings
 	}
 
 	for port, rawEntries := range bindings {
@@ -335,8 +387,16 @@ func forwardPorts(ctx context.Context, hostConfig map[string]any, forwarder Port
 
 			hostPort, _ := entry["HostPort"].(string)
 
-			if hostPort == "" {
-				continue
+			// The daemon assigns empty host ports (and picks within ranges) at
+			// start time inside the remote pod, where the result is
+			// unreachable. Pick a concrete free local port up front instead so
+			// the same port exists on both ends, and record it in the payload
+			// so `docker port` reports reality.
+			if concrete, err := concreteHostPort(hostPort); err != nil {
+				return err
+			} else if concrete != hostPort {
+				hostPort = concrete
+				entry["HostPort"] = hostPort
 			}
 
 			localPort, ok := parsePort(hostPort)
@@ -347,6 +407,15 @@ func forwardPorts(ctx context.Context, hostConfig map[string]any, forwarder Port
 
 			hostIP, _ := entry["HostIp"].(string)
 
+			// Unset means "all interfaces" to the daemon, but the local
+			// forward defaults to loopback: write the address actually bound
+			// so `docker ps` doesn't advertise an unreachable wildcard.
+			// Explicit wildcard/IPv6 requests pass through unchanged.
+			if hostIP == "" {
+				hostIP = "127.0.0.1"
+				entry["HostIp"] = hostIP
+			}
+
 			if err := forwarder.ForwardPort(ctx, hostIP, localPort, localPort); err != nil {
 				return err
 			}
@@ -354,6 +423,92 @@ func forwardPorts(ctx context.Context, hostConfig map[string]any, forwarder Port
 	}
 
 	return nil
+}
+
+// concreteHostPort turns "" and "lo-hi" range specs into a specific free
+// local port; concrete values are returned unchanged.
+func concreteHostPort(hostPort string) (string, error) {
+	if hostPort == "" {
+		port, err := system.FreePort(0)
+
+		if err != nil {
+			return "", err
+		}
+
+		return strconv.Itoa(port), nil
+	}
+
+	lo, hi, ok := strings.Cut(hostPort, "-")
+
+	if !ok {
+		return hostPort, nil
+	}
+
+	loPort, loOK := parsePort(lo)
+	hiPort, hiOK := parsePort(hi)
+
+	if !loOK || !hiOK || hiPort < loPort {
+		return hostPort, nil
+	}
+
+	for p := loPort; p <= hiPort; p++ {
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+
+		if err != nil {
+			continue
+		}
+
+		listener.Close()
+
+		return strconv.Itoa(p), nil
+	}
+
+	return "", fmt.Errorf("no free local port in range %s", hostPort)
+}
+
+// daemonImages resolves image EXPOSE declarations via the daemon's image
+// inspect endpoint.
+type daemonImages struct {
+	base   string
+	client *http.Client
+}
+
+func (d *daemonImages) ExposedPorts(ctx context.Context, image string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.base+"/images/"+url.PathEscape(image)+"/json", nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := d.client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("image inspect %q: %s", image, resp.Status)
+	}
+
+	var payload struct {
+		Config struct {
+			ExposedPorts map[string]struct{} `json:"ExposedPorts"`
+		} `json:"Config"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+
+	ports := make([]string, 0, len(payload.Config.ExposedPorts))
+
+	for port := range payload.Config.ExposedPorts {
+		ports = append(ports, port)
+	}
+
+	return ports, nil
 }
 
 func parseContainerPort(port string) (int, bool) {

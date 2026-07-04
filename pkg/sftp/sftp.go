@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -31,28 +32,43 @@ type Server struct {
 	root   *os.Root
 	mounts []rootMount
 
+	closeOnce sync.Once
+
 	config *ssh.ServerConfig
 }
 
+// NewServer serves root at the SFTP top level, with each mount overlaid at
+// its target path. An empty root creates a mounts-only server: paths outside
+// the mounts report fs.ErrNotExist.
 func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
-	r, err := os.OpenRoot(root)
+	var r *os.Root
+	var openedMounts []rootMount
 
-	if err != nil {
-		return nil, err
+	closeAll := func() {
+		if r != nil {
+			r.Close()
+		}
+
+		for _, opened := range openedMounts {
+			opened.root.Close()
+		}
 	}
 
-	openedMounts := make([]rootMount, 0, len(mounts))
+	if root != "" {
+		opened, err := os.OpenRoot(root)
+
+		if err != nil {
+			return nil, err
+		}
+
+		r = opened
+	}
 
 	for _, mount := range mounts {
 		mountRoot, err := os.OpenRoot(mount.Source)
 
 		if err != nil {
-			r.Close()
-
-			for _, opened := range openedMounts {
-				opened.root.Close()
-			}
-
+			closeAll()
 			return nil, err
 		}
 
@@ -71,12 +87,7 @@ func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
 	signer, err := generateSigner()
 
 	if err != nil {
-		r.Close()
-
-		for _, mount := range openedMounts {
-			mount.root.Close()
-		}
-
+		closeAll()
 		return nil, err
 	}
 
@@ -98,22 +109,19 @@ func NewServer(addr, root string, mounts ...Mount) (*Server, error) {
 func (s *Server) Close() error {
 	var result error
 
-	if s.root != nil {
-		result = s.root.Close()
-		s.root = nil
-	}
-
-	for i := range s.mounts {
-		if s.mounts[i].root == nil {
-			continue
+	// root and mounts stay assigned so concurrent HandleConn goroutines never
+	// observe them changing; closing is made idempotent via closeOnce instead.
+	s.closeOnce.Do(func() {
+		if s.root != nil {
+			result = s.root.Close()
 		}
 
-		if err := s.mounts[i].root.Close(); result == nil {
-			result = err
+		for _, mount := range s.mounts {
+			if err := mount.root.Close(); result == nil {
+				result = err
+			}
 		}
-
-		s.mounts[i].root = nil
-	}
+	})
 
 	return result
 }

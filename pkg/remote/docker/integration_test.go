@@ -36,6 +36,7 @@ import (
 	"github.com/adrianliechti/loop/pkg/kubernetes"
 	"github.com/adrianliechti/loop/pkg/remotemount"
 	"github.com/adrianliechti/loop/pkg/ssh"
+	"github.com/adrianliechti/loop/pkg/system"
 	"github.com/google/uuid"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -48,10 +49,6 @@ const (
 
 type integrationEnv struct {
 	proxyAddr string
-
-	client    kubernetes.Client
-	namespace string
-	name      string
 }
 
 func setupIntegrationEnv(t *testing.T) *integrationEnv {
@@ -104,7 +101,7 @@ func setupIntegrationEnv(t *testing.T) *integrationEnv {
 		t.Fatalf("wait pod: %v", err)
 	}
 
-	sshPort, err := pickPort(0)
+	sshPort, err := system.FreePort(0)
 
 	if err != nil {
 		t.Fatalf("pick ssh port: %v", err)
@@ -123,7 +120,7 @@ func setupIntegrationEnv(t *testing.T) *integrationEnv {
 
 	sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
 
-	daemonPort, err := pickPort(0)
+	daemonPort, err := system.FreePort(0)
 
 	if err != nil {
 		t.Fatalf("pick daemon port: %v", err)
@@ -151,7 +148,7 @@ func setupIntegrationEnv(t *testing.T) *integrationEnv {
 	mounts := remotemount.NewManager(ctx, sshAddr, "/data")
 	t.Cleanup(mounts.Close)
 
-	proxyPort, err := pickPort(0)
+	proxyPort, err := system.FreePort(0)
 
 	if err != nil {
 		t.Fatalf("pick proxy port: %v", err)
@@ -170,10 +167,6 @@ func setupIntegrationEnv(t *testing.T) *integrationEnv {
 
 	env := &integrationEnv{
 		proxyAddr: fmt.Sprintf("tcp://127.0.0.1:%d", proxyPort),
-
-		client:    client,
-		namespace: namespace,
-		name:      name,
 	}
 
 	t.Logf("daemon ready, pre-pulling %s", testAlpineImage)
@@ -423,7 +416,7 @@ func TestIntegration(t *testing.T) {
 	// Published container port should be reachable on the developer's
 	// localhost via the proxy's PortForwarder hook.
 	t.Run("PublishedPortForwarded", func(t *testing.T) {
-		port, err := pickPort(0)
+		port, err := system.FreePort(0)
 
 		if err != nil {
 			t.Fatal(err)

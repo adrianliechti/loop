@@ -6,24 +6,17 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 
 	"github.com/adrianliechti/loop/pkg/sftp"
 )
 
 func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
-	root, err := os.MkdirTemp("", "loop-sftp-*")
-
-	if err != nil {
-		return err
-	}
-
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	s, err := sftp.NewServer(addr, root, mounts...)
+	// Mounts-only server (empty root): only the volume targets exist.
+	s, err := sftp.NewServer(addr, "", mounts...)
 
 	if err != nil {
-		os.RemoveAll(root)
 		return err
 	}
 
@@ -33,7 +26,6 @@ func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
 
 	if err != nil {
 		s.Close()
-		os.RemoveAll(root)
 		return err
 	}
 
@@ -41,7 +33,6 @@ func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
 		<-ctx.Done()
 		l.Close()
 		s.Close()
-		os.RemoveAll(root)
 	}()
 
 	go func() {

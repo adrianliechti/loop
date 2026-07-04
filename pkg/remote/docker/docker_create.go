@@ -29,9 +29,6 @@ type CreateOptions struct {
 }
 
 func Create(ctx context.Context, client kubernetes.Client, options *CreateOptions) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	if options == nil {
 		options = new(CreateOptions)
 	}
@@ -52,8 +49,17 @@ func Create(ctx context.Context, client kubernetes.Client, options *CreateOption
 		options.TunnelImage = "ghcr.io/adrianliechti/loop-tunnel"
 	}
 
+	if options.CPU.IsZero() {
+		options.CPU = resource.MustParse("500m")
+	}
+
+	if options.Memory.IsZero() {
+		options.Memory = resource.MustParse("1024Mi")
+	}
+
+	// Keep in sync with the `loop docker create` flag defaults.
 	if options.Storage.IsZero() {
-		options.Storage = resource.MustParse("10Gi")
+		options.Storage = resource.MustParse("20Gi")
 	}
 
 	statefulset := templateStatefulSet(options)
