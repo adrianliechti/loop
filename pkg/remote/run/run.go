@@ -108,7 +108,14 @@ func Run(ctx context.Context, client kubernetes.Client, container *Container, op
 
 	defer func() {
 		cli.Infof("★ Removing container (%s/%s)...", pod.Namespace, pod.Name)
-		deletePod(context.Background(), client, pod.Namespace, pod.Name)
+
+		// ctx is cancelled by the time this runs (normal Ctrl+C path), so
+		// cleanup — including OnDelete — gets its own bounded context rather
+		// than a dead one that fails every API call.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
+		deletePod(ctx, client, pod.Namespace, pod.Name)
 
 		if options.OnDelete != nil {
 			options.OnDelete(ctx, client, pod)
@@ -217,10 +224,6 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 		}
 
 		mounts = append(mounts, mount)
-	}
-
-	for i, c := range pod.Spec.InitContainers {
-		pod.Spec.InitContainers[i].VolumeMounts = append(c.VolumeMounts, mounts...)
 	}
 
 	for i, c := range pod.Spec.Containers {

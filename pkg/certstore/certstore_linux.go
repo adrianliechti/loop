@@ -77,6 +77,29 @@ func RemoveRootCA(ctx context.Context, name string) error {
 	return update.Run()
 }
 
+// trustStores describes where each distribution family keeps its local trust
+// anchors, in probe order. The first one whose directory exists wins.
+var trustStores = []struct {
+	dir       string
+	extension string
+	tool      []string
+}{
+	{"/etc/pki/ca-trust/source/anchors/", "pem", []string{"update-ca-trust", "extract"}},
+	{"/usr/local/share/ca-certificates/", "crt", []string{"update-ca-certificates"}},
+	{"/etc/ca-certificates/trust-source/anchors/", "crt", []string{"trust", "extract-compat"}},
+	{"/usr/share/pki/trust/anchors/", "pem", []string{"update-ca-certificates"}},
+}
+
+func trustStore() (dir, extension string, tool []string, err error) {
+	for _, s := range trustStores {
+		if _, err := os.Stat(s.dir); err == nil {
+			return s.dir, s.extension, s.tool, nil
+		}
+	}
+
+	return "", "", nil, errors.New("could not determine certificate path")
+}
+
 func certPath(name string) (string, error) {
 	fingerprint, err := certFingerprint(name)
 
@@ -84,41 +107,17 @@ func certPath(name string) (string, error) {
 		return "", err
 	}
 
-	if _, err := os.Stat("/etc/pki/ca-trust/source/anchors/"); !os.IsNotExist(err) {
-		return fmt.Sprintf("/etc/pki/ca-trust/source/anchors/ca-%s.pem", fingerprint), nil
+	dir, extension, _, err := trustStore()
+
+	if err != nil {
+		return "", err
 	}
 
-	if _, err := os.Stat("/usr/local/share/ca-certificates/"); !os.IsNotExist(err) {
-		return fmt.Sprintf("/usr/local/share/ca-certificates/ca-%s.crt", fingerprint), nil
-	}
-
-	if _, err := os.Stat("/etc/ca-certificates/trust-source/anchors/"); !os.IsNotExist(err) {
-		return fmt.Sprintf("/etc/ca-certificates/trust-source/anchors/ca-%s.crt", fingerprint), nil
-	}
-
-	if _, err := os.Stat("/usr/share/pki/trust/anchors/"); !os.IsNotExist(err) {
-		return fmt.Sprintf("/usr/share/pki/trust/anchors/ca-%s.pem", fingerprint), nil
-	}
-
-	return "", errors.New("could not determine certificate path")
+	return fmt.Sprintf("%sca-%s.%s", dir, fingerprint, extension), nil
 }
 
 func certTool() ([]string, error) {
-	if _, err := os.Stat("/etc/pki/ca-trust/source/anchors/"); !os.IsNotExist(err) {
-		return []string{"update-ca-trust", "extract"}, nil
-	}
+	_, _, tool, err := trustStore()
 
-	if _, err := os.Stat("/usr/local/share/ca-certificates/"); !os.IsNotExist(err) {
-		return []string{"update-ca-certificates"}, nil
-	}
-
-	if _, err := os.Stat("/etc/ca-certificates/trust-source/anchors/"); !os.IsNotExist(err) {
-		return []string{"trust", "extract-compat"}, nil
-	}
-
-	if _, err := os.Stat("/usr/share/pki/trust/anchors/"); !os.IsNotExist(err) {
-		return []string{"update-ca-certificates"}, nil
-	}
-
-	return nil, errors.New("could not determine certificate tool")
+	return tool, err
 }

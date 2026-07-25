@@ -16,7 +16,6 @@ import (
 	"github.com/adrianliechti/loop/pkg/ssh"
 	"github.com/adrianliechti/loop/pkg/system"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,7 +37,7 @@ func Connect(ctx context.Context, client kubernetes.Client, name string, options
 	// Fail fast on unknown names: waiting for a pod of a daemon that was never
 	// created would block forever.
 	if _, err := client.AppsV1().StatefulSets(options.Namespace).Get(ctx, resourceName(name), metav1.GetOptions{}); err != nil {
-		if apierrors.IsNotFound(err) {
+		if kubernetes.IsNotFound(err) {
 			return fmt.Errorf("docker instance %q not found in namespace %q", name, options.Namespace)
 		}
 

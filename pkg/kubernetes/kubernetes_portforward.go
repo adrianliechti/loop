@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/tools/portforward"
@@ -28,39 +27,11 @@ func (c *client) ServicePortForward(ctx context.Context, namespace, name, addres
 		return err
 	}
 
-	servicePorts := make(map[int]int)
+	servicePorts := ServicePortMap(*service, pod.Spec.Containers...)
 
-	for _, port := range service.Spec.Ports {
-		servicePort := int(port.Port)
-		containerPort := 0
+	mappings := make(map[int]int, len(ports))
 
-		if !(port.Protocol == corev1.ProtocolTCP || port.Protocol == corev1.ProtocolUDP) {
-			continue
-		}
-
-		for _, c := range pod.Spec.Containers {
-			for _, p := range c.Ports {
-				if p.Name != "" && p.Name == port.TargetPort.String() {
-					containerPort = int(p.ContainerPort)
-				}
-			}
-		}
-
-		if port.TargetPort.IntVal > 0 {
-			containerPort = int(port.TargetPort.IntVal)
-		}
-
-		if servicePort > 0 && containerPort > 0 {
-			servicePorts[servicePort] = containerPort
-		}
-	}
-
-	mappings := make(map[int]int)
-
-	for k, v := range ports {
-		localPort := k
-		targetPort := v
-
+	for localPort, targetPort := range ports {
 		if val, ok := servicePorts[targetPort]; ok {
 			targetPort = val
 		}

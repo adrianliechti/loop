@@ -227,10 +227,10 @@ func (c *client) Resource(resource schema.GroupVersionResource) dynamic.Namespac
 	return c.dynamic.Resource(resource)
 }
 
-func (c client) GatewayV1() gatewayv1.GatewayV1Interface {
+func (c *client) GatewayV1() gatewayv1.GatewayV1Interface {
 	return c.gateway.GatewayV1()
 }
 
-func (c client) ApiextensionsV1() apiextensionsv1.ApiextensionsV1Interface {
+func (c *client) ApiextensionsV1() apiextensionsv1.ApiextensionsV1Interface {
 	return c.apiextensions.ApiextensionsV1()
 }

@@ -89,15 +89,7 @@ func WithCommand(command string) Option {
 
 func WithLocalPortForward(p PortForward) Option {
 	return func(c *Client) {
-		if p.LocalAddr == "" {
-			p.LocalAddr = "127.0.0.1"
-		}
-
-		if p.RemoteAddr == "" {
-			p.RemoteAddr = "127.0.0.1"
-		}
-
-		c.localPortForwards = append(c.localPortForwards, p)
+		c.localPortForwards = append(c.localPortForwards, withDefaultAddrs(p))
 	}
 }
 
@@ -113,16 +105,20 @@ func WithReady(ch chan<- struct{}) Option {
 
 func WithRemotePortForward(p PortForward) Option {
 	return func(c *Client) {
-		if p.LocalAddr == "" {
-			p.LocalAddr = "127.0.0.1"
-		}
-
-		if p.RemoteAddr == "" {
-			p.RemoteAddr = "127.0.0.1"
-		}
-
-		c.remotePortForwards = append(c.remotePortForwards, p)
+		c.remotePortForwards = append(c.remotePortForwards, withDefaultAddrs(p))
 	}
+}
+
+func withDefaultAddrs(p PortForward) PortForward {
+	if p.LocalAddr == "" {
+		p.LocalAddr = "127.0.0.1"
+	}
+
+	if p.RemoteAddr == "" {
+		p.RemoteAddr = "127.0.0.1"
+	}
+
+	return p
 }
 
 func (c *Client) Run(ctx context.Context) error {

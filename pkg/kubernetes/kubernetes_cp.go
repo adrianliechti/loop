@@ -8,16 +8,12 @@ import (
 )
 
 func (c *client) ReadFileInPod(ctx context.Context, namespace, name, container, path string, data io.Writer) error {
-	cp := []string{
+	cat := []string{
 		"cat",
 		path,
 	}
 
-	if err := c.PodExec(ctx, namespace, name, container, cp, false, nil, data, os.Stderr); err != nil {
-		return err
-	}
-
-	return nil
+	return c.PodExec(ctx, namespace, name, container, cat, false, nil, data, os.Stderr)
 }
 
 func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container, containerPath string, data io.Reader) error {
@@ -37,9 +33,5 @@ func (c *client) CreateFileInPod(ctx context.Context, namespace, name, container
 		containerPath,
 	}
 
-	if err := c.PodExec(ctx, namespace, name, container, cp, false, data, os.Stdout, os.Stderr); err != nil {
-		return err
-	}
-
-	return nil
+	return c.PodExec(ctx, namespace, name, container, cp, false, data, os.Stdout, os.Stderr)
 }

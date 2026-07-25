@@ -7,7 +7,7 @@ import (
 
 func FreePort(preference int) (int, error) {
 	if port, err := freePort(preference); err == nil {
-		return port, err
+		return port, nil
 	}
 
 	return freePort(0)

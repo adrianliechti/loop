@@ -31,8 +31,6 @@ func (c *client) Apply(ctx context.Context, namespace string, reader io.Reader) 
 		return err
 	}
 
-	docs := splitDocuments(data)
-
 	discovery, err := discovery.NewDiscoveryClientForConfig(c.Config())
 
 	if err != nil {
@@ -43,9 +41,9 @@ func (c *client) Apply(ctx context.Context, namespace string, reader io.Reader) 
 
 	serializer := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 
-	for _, doc := range docs {
+	for _, doc := range documentSeparator.Split(string(data), -1) {
 		obj := &unstructured.Unstructured{}
-		_, gvk, err := serializer.Decode(doc, nil, obj)
+		_, gvk, err := serializer.Decode([]byte(doc), nil, obj)
 
 		if err != nil {
 			if runtime.IsMissingKind(err) {
@@ -110,16 +108,4 @@ func (c *client) ApplyURL(ctx context.Context, namespace string, url string) err
 	}
 
 	return c.Apply(ctx, namespace, resp.Body)
-}
-
-func splitDocuments(data []byte) [][]byte {
-	parts := documentSeparator.Split(string(data), -1)
-
-	results := make([][]byte, len(parts))
-
-	for i, doc := range parts {
-		results[i] = []byte(doc)
-	}
-
-	return results
 }

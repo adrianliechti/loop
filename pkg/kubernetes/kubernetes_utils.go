@@ -41,7 +41,11 @@ func (c *client) ServicePods(ctx context.Context, namespace, name string) ([]cor
 		LabelSelector: labels.SelectorFromSet(service.Spec.Selector).String(),
 	})
 
-	return pods.Items, err
+	if err != nil {
+		return nil, err
+	}
+
+	return pods.Items, nil
 }
 
 func (c *client) ServicePod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
@@ -74,6 +78,41 @@ func (c *client) ServiceAddress(ctx context.Context, namespace, name string) (st
 	}
 
 	return service.Spec.ClusterIP, nil
+}
+
+// ServicePortMap maps each of the service's TCP ports to the container port it
+// targets, resolving named targetPorts against the given containers. Non-TCP
+// ports are skipped: everything consuming this mapping tunnels over a
+// port-forward, which cannot carry UDP or SCTP.
+func ServicePortMap(service corev1.Service, containers ...corev1.Container) map[int]int {
+	ports := make(map[int]int)
+
+	for _, port := range service.Spec.Ports {
+		if port.Protocol != "" && port.Protocol != corev1.ProtocolTCP {
+			continue
+		}
+
+		servicePort := int(port.Port)
+		containerPort := 0
+
+		for _, c := range containers {
+			for _, p := range c.Ports {
+				if p.Name != "" && p.Name == port.TargetPort.String() {
+					containerPort = int(p.ContainerPort)
+				}
+			}
+		}
+
+		if port.TargetPort.IntVal > 0 {
+			containerPort = int(port.TargetPort.IntVal)
+		}
+
+		if servicePort > 0 && containerPort > 0 {
+			ports[servicePort] = containerPort
+		}
+	}
+
+	return ports
 }
 
 func (c *client) WaitForPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {

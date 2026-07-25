@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 
 	"github.com/adrianliechti/loop/pkg/sftp"
@@ -37,7 +37,7 @@ func startServer(ctx context.Context, port int, mounts []sftp.Mount) error {
 
 	go func() {
 		if err := s.Serve(l); err != nil && !errors.Is(err, net.ErrClosed) {
-			log.Println("could not serve sftp", "error", err)
+			slog.Error("could not serve sftp", "error", err)
 		}
 	}()
 

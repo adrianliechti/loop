@@ -12,6 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// serviceCIDRPattern extracts the range from the API server's rejection of an
+// out-of-range ClusterIP, which is the only place it reports the Service CIDR.
+var serviceCIDRPattern = regexp.MustCompile(`valid IPs is ([.\/0-9]+)`)
+
 func (c *client) Version(ctx context.Context) (*semver.Version, error) {
 	version, err := c.Discovery().ServerVersion()
 
@@ -70,8 +74,7 @@ func (c *client) ServiceCIDR(ctx context.Context) (string, error) {
 		return "", errors.New("unable to determine Service CIDR")
 	}
 
-	r, _ := regexp.Compile(`valid IPs is ([.\/0-9]+)`)
-	matches := r.FindStringSubmatch(err.Error())
+	matches := serviceCIDRPattern.FindStringSubmatch(err.Error())
 
 	if len(matches) != 2 {
 		return "", errors.New("unable to determine Service CIDR")

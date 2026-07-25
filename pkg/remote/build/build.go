@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/pkg/docker"
@@ -157,6 +159,14 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 		file = "Dockerfile"
 	}
 
+	// The Dockerfile is named relative to the build context, which is all that
+	// gets uploaded; anything outside it could not be read remotely anyway.
+	file = path.Clean(filepath.ToSlash(file))
+
+	if path.IsAbs(file) || file == ".." || strings.HasPrefix(file, "../") {
+		return fmt.Errorf("dockerfile %q must be inside the build context", file)
+	}
+
 	pod := templatePod(ctx, client, options)
 
 	if options.OnPod != nil {
@@ -169,7 +179,14 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 
 	defer func() {
 		cli.Infof("★ Removing container (%s/%s)...", pod.Namespace, pod.Name)
-		stopPod(context.Background(), client, pod.Namespace, pod.Name)
+
+		// ctx is cancelled by the time this runs (normal Ctrl+C path), so
+		// cleanup — including OnDelete — gets its own bounded context rather
+		// than a dead one that fails every API call.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
+		stopPod(ctx, client, pod.Namespace, pod.Name)
 
 		if options.OnDelete != nil {
 			options.OnDelete(ctx, client, pod)
@@ -183,8 +200,12 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 	cli.Infof("★ Copying build context...")
 
 	builderPath := "/data/build-" + uuid.NewString()[0:7]
-	builderContext := builderPath
-	builderDockerfile := path.Dir(path.Join(builderPath, file))
+
+	// buildctl takes the Dockerfile as a directory plus a filename opt, so a
+	// `-f sub/dir/Dockerfile.dev` has to be split. Without the filename opt the
+	// dockerfile frontend silently falls back to "Dockerfile".
+	builderDockerfile := path.Join(builderPath, path.Dir(file))
+	builderDockerfileName := path.Base(file)
 
 	r, w := io.Pipe()
 
@@ -255,8 +276,9 @@ func Run(ctx context.Context, client kubernetes.Client, image Image, dir, file s
 
 		"--frontend", "dockerfile.v0",
 
-		"--local", "context=" + builderContext,
+		"--local", "context=" + builderPath,
 		"--local", "dockerfile=" + builderDockerfile,
+		"--opt", "filename=" + builderDockerfileName,
 
 		"--output", strings.Join(output, ","),
 	}

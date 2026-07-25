@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path"
@@ -126,11 +126,7 @@ func (m *Manager) Resolve(ctx context.Context, source string) (string, error) {
 		return source, nil
 	}
 
-	abs, err := filepath.Abs(source)
-
-	if err != nil {
-		return "", err
-	}
+	abs := filepath.Clean(source)
 
 	info, err := os.Stat(abs)
 
@@ -313,7 +309,7 @@ func (m *Manager) establish(ctx context.Context, localRoot string, state *mountS
 		err := forward.Run(mountCtx)
 
 		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Println("could not maintain remote mount tunnel", "path", localRoot, "error", err)
+			slog.Error("could not maintain remote mount tunnel", "path", localRoot, "error", err)
 		}
 
 		forwardDone <- err
@@ -354,7 +350,7 @@ func (m *Manager) establish(ctx context.Context, localRoot string, state *mountS
 
 	go func() {
 		if err := client.Run(mountCtx); err != nil && !errors.Is(err, context.Canceled) {
-			log.Println("could not maintain remote mount", "path", localRoot, "error", err)
+			slog.Error("could not maintain remote mount", "path", localRoot, "error", err)
 		}
 	}()
 
@@ -422,7 +418,7 @@ func startSFTPServer(ctx context.Context, port int, root string) error {
 
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, net.ErrClosed) {
-			log.Println("could not serve sftp", "error", err)
+			slog.Error("could not serve sftp", "error", err)
 		}
 	}()
 

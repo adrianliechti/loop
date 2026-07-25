@@ -20,8 +20,17 @@ func WriteTarball(w io.Writer, root string, options *TarballOptions) error {
 	}
 
 	t := tar.NewWriter(w)
-	defer t.Close()
 
+	if err := writeEntries(t, root, options); err != nil {
+		return err
+	}
+
+	// Close writes the trailing blocks that mark the end of the archive; a
+	// failure here means the consumer would see a truncated stream.
+	return t.Close()
+}
+
+func writeEntries(t *tar.Writer, root string, options *TarballOptions) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
