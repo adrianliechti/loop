@@ -17,9 +17,9 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// addressGroup is the second octet of the loopback aliases handed out here; it
-// keeps gateway addresses disjoint from the catapult's.
-const addressGroup = 245
+// addressGroup is the loopback partition the aliases handed out here come from;
+// it keeps gateway addresses disjoint from the catapult's.
+const addressGroup = 1
 
 type Gateway struct {
 	client  kubernetes.Client
@@ -71,18 +71,21 @@ func (c *Gateway) Start(ctx context.Context) error {
 		namespaces = []string{""}
 	}
 
-	// Services are watched cluster-wide regardless of scope: an ingress or route
-	// in one namespace routinely publishes an address belonging to a controller
-	// service in another.
+	// Services and gateways are watched cluster-wide regardless of scope: an
+	// ingress or route in one namespace routinely publishes an address belonging
+	// to a controller service in another, and the usual Gateway API layout keeps
+	// one shared Gateway in an infrastructure namespace with the routes that
+	// attach to it spread across app namespaces. Scope is instead applied where
+	// a gateway is used as a hostname source in its own right, in listTunnels.
 	if err := c.watchServices(ctx, ""); err != nil {
 		return err
 	}
 
-	for _, namespace := range namespaces {
-		if err := c.watchGateways(ctx, namespace); err != nil {
-			return err
-		}
+	if err := c.watchGateways(ctx, ""); err != nil {
+		return err
+	}
 
+	for _, namespace := range namespaces {
 		if err := c.watchHTTPRoutes(ctx, namespace); err != nil {
 			return err
 		}
@@ -135,6 +138,13 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 	}
 
 	for _, g := range gateways {
+		// Gateways are stored cluster-wide so routes can attach across
+		// namespaces, but a listener hostname is only published on its own
+		// account when the gateway itself is in scope.
+		if !c.inScope(g.Namespace) {
+			continue
+		}
+
 		addr := gatewayAddress(g)
 
 		if addr == "" {
@@ -154,6 +164,13 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 		var addr string
 
 		for _, p := range r.Spec.ParentRefs {
+			// Per Gateway API defaulting: an unset Group means the Gateway API
+			// group, an unset Kind means Gateway, and an unset Namespace means
+			// the route's own namespace.
+			if p.Group != nil && *p.Group != gatewayv1.GroupName {
+				continue
+			}
+
 			if p.Kind != nil && *p.Kind != "Gateway" {
 				continue
 			}
@@ -162,6 +179,10 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 
 			if p.Namespace != nil {
 				namespace = string(*p.Namespace)
+			}
+
+			if !parentAccepted(r, namespace, string(p.Name)) {
+				continue
 			}
 
 			for _, g := range gateways {
@@ -184,7 +205,11 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 		}
 	}
 
-	for host, addr := range mappings {
+	// Sorted so the hostname that names a tunnel, and the order the rest are
+	// appended in, do not shift between refreshes.
+	for _, host := range slices.Sorted(maps.Keys(mappings)) {
+		addr := mappings[host]
+
 		if strings.Contains(host, "*") {
 			continue
 		}
@@ -209,11 +234,11 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 			continue
 		}
 
-		if len(pods.Items) == 0 {
+		pod, ok := kubernetes.SelectPod(pods.Items)
+
+		if !ok {
 			continue
 		}
-
-		pod := pods.Items[0]
 
 		address := forward.MapAddress(addressGroup, service.Spec.ClusterIP)
 		ports := kubernetes.ServicePortMap(*service, pod.Spec.Containers...)
@@ -221,25 +246,78 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 		tunnels[addr] = forward.NewTunnel(c.client, pod.Namespace, pod.Name, address, ports, []string{host})
 	}
 
-	return slices.Collect(maps.Values(tunnels)), nil
+	result := make([]*forward.Tunnel, 0, len(tunnels))
+
+	for _, addr := range slices.Sorted(maps.Keys(tunnels)) {
+		result = append(result, tunnels[addr])
+	}
+
+	return result, nil
+}
+
+// inScope reports whether a namespace is one the user asked to watch.
+func (c *Gateway) inScope(namespace string) bool {
+	if len(c.options.Namespaces) == 0 {
+		return true
+	}
+
+	return slices.Contains(c.options.Namespaces, namespace)
+}
+
+// parentAccepted reports whether the gateway took the route on. Attachment is
+// not the route's to declare: a listener admits routes from other namespaces
+// only if its allowedRoutes says so, and admits a route at all only if their
+// hostnames intersect — so a parentRef alone does not mean the gateway serves
+// those hostnames, and tunneling them would point the hosts file at a gateway
+// that answers for something else.
+//
+// A missing status is not read as a refusal. Not every implementation fills it
+// in, and a Gateway that no controller has claimed publishes no address to
+// tunnel to in the first place.
+func parentAccepted(r gatewayv1.HTTPRoute, namespace, name string) bool {
+	var rejected bool
+
+	for _, s := range r.Status.Parents {
+		if string(s.ParentRef.Name) != name {
+			continue
+		}
+
+		if string(kubernetes.Deref(s.ParentRef.Namespace, gatewayv1.Namespace(r.Namespace))) != namespace {
+			continue
+		}
+
+		for _, cond := range s.Conditions {
+			if cond.Type != string(gatewayv1.RouteConditionAccepted) {
+				continue
+			}
+
+			// One accepting listener is enough; a route may name the same
+			// gateway several times over different sections.
+			if cond.Status == metav1.ConditionTrue {
+				return true
+			}
+
+			rejected = true
+		}
+	}
+
+	return !rejected
 }
 
 func (c *Gateway) watchServices(ctx context.Context, namespace string) error {
-	list, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	// Listed up front only so a permission error or a missing CRD fails Start
+	// with a useful message; the stores themselves are filled by the informers.
+	if _, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		return err
 	}
 
-	forward.Watch(ctx, c.services, c.client.CoreV1().RESTClient(), "services", namespace, list.Items)
+	forward.Watch(ctx, c.services, c.client.CoreV1().RESTClient(), "services", namespace)
 
 	return nil
 }
 
 func (c *Gateway) watchGateways(ctx context.Context, namespace string) error {
-	list, err := c.client.GatewayV1().Gateways(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	if _, err := c.client.GatewayV1().Gateways(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		// The Gateway API CRDs are optional; without them there is nothing to
 		// watch and ingresses alone still work.
 		if kubernetes.IsNotFound(err) {
@@ -249,15 +327,13 @@ func (c *Gateway) watchGateways(ctx context.Context, namespace string) error {
 		return err
 	}
 
-	forward.Watch(ctx, c.gateways, c.client.GatewayV1().RESTClient(), "gateways", namespace, list.Items)
+	forward.Watch(ctx, c.gateways, c.client.GatewayV1().RESTClient(), "gateways", namespace)
 
 	return nil
 }
 
 func (c *Gateway) watchHTTPRoutes(ctx context.Context, namespace string) error {
-	list, err := c.client.GatewayV1().HTTPRoutes(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	if _, err := c.client.GatewayV1().HTTPRoutes(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		if kubernetes.IsNotFound(err) {
 			return nil
 		}
@@ -265,15 +341,13 @@ func (c *Gateway) watchHTTPRoutes(ctx context.Context, namespace string) error {
 		return err
 	}
 
-	forward.Watch(ctx, c.httproutes, c.client.GatewayV1().RESTClient(), "httproutes", namespace, list.Items)
+	forward.Watch(ctx, c.httproutes, c.client.GatewayV1().RESTClient(), "httproutes", namespace)
 
 	return nil
 }
 
 func (c *Gateway) watchIngresses(ctx context.Context, namespace string) error {
-	list, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	if _, err := c.client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		if kubernetes.IsNotFound(err) {
 			return nil
 		}
@@ -281,7 +355,7 @@ func (c *Gateway) watchIngresses(ctx context.Context, namespace string) error {
 		return err
 	}
 
-	forward.Watch(ctx, c.ingresses, c.client.NetworkingV1().RESTClient(), "ingresses", namespace, list.Items)
+	forward.Watch(ctx, c.ingresses, c.client.NetworkingV1().RESTClient(), "ingresses", namespace)
 
 	return nil
 }
@@ -306,18 +380,19 @@ func findService(services []corev1.Service, addr string) (*corev1.Service, bool)
 	return nil, false
 }
 
-// gatewayAddress returns the gateway's external address, preferring IP over hostname.
+// gatewayAddress returns the gateway's external address, preferring IP over
+// hostname. An unset Type counts as an IP: the field defaults to IPAddress.
 func gatewayAddress(g gatewayv1.Gateway) string {
 	var addr string
 
 	for _, a := range g.Status.Addresses {
-		if a.Type == nil || *a.Type == gatewayv1.HostnameAddressType {
+		if a.Type != nil && *a.Type == gatewayv1.HostnameAddressType {
 			addr = a.Value
 		}
 	}
 
 	for _, a := range g.Status.Addresses {
-		if a.Type != nil && *a.Type == gatewayv1.IPAddressType {
+		if a.Type == nil || *a.Type == gatewayv1.IPAddressType {
 			addr = a.Value
 		}
 	}

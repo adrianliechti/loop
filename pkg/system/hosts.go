@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"runtime"
 	"slices"
@@ -36,8 +37,11 @@ func NewHostsSection(name string) (*HostsSection, error) {
 	}, nil
 }
 
+// Add replaces the entries for address. The hosts are cloned: callers pass a
+// slice they keep using (a tunnel's own host list), and Flush must not be able
+// to reorder it underneath them.
 func (s *HostsSection) Add(address string, hosts ...string) {
-	s.hosts[address] = hosts
+	s.hosts[address] = slices.Clone(hosts)
 }
 
 func (s *HostsSection) Remove(address string) {
@@ -48,20 +52,27 @@ func (s *HostsSection) Clear() {
 	clear(s.hosts)
 }
 
+// Flush rewrites this section in the hosts file, leaving the rest of it alone.
+//
+// The read and the write happen under one lock. The catapult and the gateway
+// each own a section of the same file and flush concurrently on their own
+// refresh timers, so reading and writing under separate locks lets the later
+// writer rebuild the file from a snapshot taken before the earlier one landed —
+// reverting the other section, and on shutdown leaving entries behind that
+// point at loopback aliases that no longer exist.
 func (s *HostsSection) Flush() error {
+	return lockedfile.Transform(s.path, func(data []byte) ([]byte, error) {
+		return []byte(s.render(string(data))), nil
+	})
+}
+
+// render returns text with this section replaced by the current entries.
+func (s *HostsSection) render(text string) string {
 	ln := "\n"
 
 	if runtime.GOOS == "windows" {
 		ln = "\r\n"
 	}
-
-	data, err := lockedfile.Read(s.path)
-
-	if err != nil {
-		return err
-	}
-
-	text := string(data)
 
 	headerStart := fmt.Sprintf("# Start Section %s%s", s.name, ln)
 	headerEnd := fmt.Sprintf("# End Section %s%s", s.name, ln)
@@ -77,10 +88,11 @@ func (s *HostsSection) Flush() error {
 		text = strings.TrimRight(text, ln) + ln + ln
 		text += headerStart
 
-		for address, hosts := range s.hosts {
-			slices.Sort(hosts)
-
-			for _, host := range hosts {
+		// Sorted so an unchanged section renders byte-identical. This runs on
+		// every refresh, and map order would otherwise reshuffle every line of
+		// the section every ten seconds.
+		for _, address := range slices.Sorted(maps.Keys(s.hosts)) {
+			for _, host := range slices.Sorted(slices.Values(s.hosts[address])) {
 				text += fmt.Sprintf("%s %s%s", address, host, ln)
 			}
 		}
@@ -88,10 +100,5 @@ func (s *HostsSection) Flush() error {
 		text += fmt.Sprintf("%s%s", headerEnd, ln)
 	}
 
-	text = strings.TrimRight(text, ln) + ln
-
-	if err := lockedfile.Write(s.path, strings.NewReader(text), 0644); err != nil {
-		return err
-	}
-	return nil
+	return strings.TrimRight(text, ln) + ln
 }

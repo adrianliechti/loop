@@ -80,6 +80,59 @@ func (c *client) ServiceAddress(ctx context.Context, namespace, name string) (st
 	return service.Spec.ClusterIP, nil
 }
 
+// IsPodReady reports whether a pod is a usable forward target rather than one
+// that merely reports Running: a pod that is still starting up, failing its
+// readiness probe, or draining during its termination grace period accepts
+// connections it cannot serve.
+func IsPodReady(pod corev1.Pod) bool {
+	if pod.DeletionTimestamp != nil {
+		return false
+	}
+
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady {
+			return cond.Status == corev1.ConditionTrue
+		}
+	}
+
+	return false
+}
+
+// SelectPod picks the pod a service's tunnel targets. Terminating pods are
+// skipped and ready ones preferred, but a running-but-unready pod is still
+// returned as a last resort: callers drop the tunnel when this returns false,
+// and for a single-replica workload that would pull the service's hosts entry
+// out and put it back on every restart.
+func SelectPod(pods []corev1.Pod) (corev1.Pod, bool) {
+	var fallback *corev1.Pod
+
+	for i := range pods {
+		pod := &pods[i]
+
+		if pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		if IsPodReady(*pod) {
+			return *pod, true
+		}
+
+		if fallback == nil {
+			fallback = pod
+		}
+	}
+
+	if fallback != nil {
+		return *fallback, true
+	}
+
+	return corev1.Pod{}, false
+}
+
 // ServicePortMap maps each of the service's TCP ports to the container port it
 // targets, resolving named targetPorts against the given containers. Non-TCP
 // ports are skipped: everything consuming this mapping tunnels over a

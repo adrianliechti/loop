@@ -61,20 +61,23 @@ func (s *Store[T]) delete(key string) {
 	delete(s.items, key)
 }
 
-// Watch seeds the store with items and then keeps it up to date from an
-// informer that runs until ctx is done. The caller lists explicitly so the
-// store is already populated on return: the informer's own initial sync is
-// asynchronous and would leave the first reconcile looking at an empty store.
-func Watch[T any, PT object[T]](ctx context.Context, store *Store[T], getter cache.Getter, resource, namespace string, items []T) {
-	for _, item := range items {
-		var p PT = &item
-		store.set(key(p), item)
-	}
-
+// Watch keeps the store up to date from an informer that runs until ctx is
+// done, blocking until the informer's initial list has been applied so the
+// first reconcile does not look at an empty store.
+//
+// The store is populated only from informer events, never seeded by the caller:
+// the informer's initial list replaces its own (empty) cache, so it reports no
+// deletions for it, and anything seeded that had since been deleted would
+// linger as a phantom entry for the lifetime of the process. Callers still list
+// the resource themselves beforehand, but only to surface permission and
+// missing-CRD errors that a backgrounded informer would merely log.
+func Watch[T any, PT object[T]](ctx context.Context, store *Store[T], getter cache.Getter, resource, namespace string) {
 	lw := cache.NewListWatchFromClient(getter, resource, namespace, fields.Everything())
 
 	_, controller := cache.NewInformer(lw, PT(new(T)), 0, storeHandlers[T, PT](store))
 	go controller.Run(ctx.Done())
+
+	cache.WaitForCacheSync(ctx.Done(), controller.HasSynced)
 }
 
 func storeHandlers[T any, PT object[T]](store *Store[T]) cache.ResourceEventHandlerFuncs {

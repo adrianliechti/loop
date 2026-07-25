@@ -13,9 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// addressGroup is the second octet of the loopback aliases handed out here; it
-// keeps catapult addresses disjoint from the gateway's.
-const addressGroup = 244
+// addressGroup is the loopback partition the aliases handed out here come from;
+// it keeps catapult addresses disjoint from the gateway's.
+const addressGroup = 0
 
 type Catapult struct {
 	client  kubernetes.Client
@@ -105,11 +105,11 @@ func (c *Catapult) listTunnels(context.Context) ([]*forward.Tunnel, error) {
 			continue
 		}
 
-		if len(matching) == 0 {
+		pod, ok := kubernetes.SelectPod(matching)
+
+		if !ok {
 			continue
 		}
-
-		pod := matching[0]
 
 		hosts := []string{
 			fmt.Sprintf("%s.%s", service.Name, service.Namespace),
@@ -130,25 +130,23 @@ func (c *Catapult) listTunnels(context.Context) ([]*forward.Tunnel, error) {
 }
 
 func (c *Catapult) watchPods(ctx context.Context, namespace string) error {
-	list, err := c.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	// Listed up front only so a permission error fails Start with a useful
+	// message; the store itself is filled by the informer.
+	if _, err := c.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		return err
 	}
 
-	forward.Watch(ctx, c.pods, c.client.CoreV1().RESTClient(), "pods", namespace, list.Items)
+	forward.Watch(ctx, c.pods, c.client.CoreV1().RESTClient(), "pods", namespace)
 
 	return nil
 }
 
 func (c *Catapult) watchServices(ctx context.Context, namespace string) error {
-	list, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
-
-	if err != nil {
+	if _, err := c.client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{}); err != nil {
 		return err
 	}
 
-	forward.Watch(ctx, c.services, c.client.CoreV1().RESTClient(), "services", namespace, list.Items)
+	forward.Watch(ctx, c.services, c.client.CoreV1().RESTClient(), "services", namespace)
 
 	return nil
 }
@@ -162,6 +160,13 @@ func selectPods(pods []corev1.Pod, namespace string, selector labels.Selector) [
 		}
 
 		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		// A pod inside its termination grace period still reports Running while
+		// it drains, and will be gone shortly; forwarding to it during a rolling
+		// update just hands connections to the replica that is going away.
+		if pod.DeletionTimestamp != nil {
 			continue
 		}
 

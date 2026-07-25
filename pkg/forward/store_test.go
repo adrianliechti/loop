@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -82,17 +83,17 @@ func TestStoreHandlersDeleteEmptyTombstone(t *testing.T) {
 }
 
 func TestMapAddress(t *testing.T) {
-	a := MapAddress(244, "10.0.0.1")
+	a := MapAddress(0, "10.0.0.1")
 
-	if a != MapAddress(244, "10.0.0.1") {
+	if a != MapAddress(0, "10.0.0.1") {
 		t.Fatal("MapAddress is not deterministic")
 	}
 
-	if a == MapAddress(245, "10.0.0.1") {
+	if a == MapAddress(1, "10.0.0.1") {
 		t.Fatal("different groups mapped to the same address")
 	}
 
-	if a == MapAddress(244, "10.0.0.2") {
+	if a == MapAddress(0, "10.0.0.2") {
 		t.Fatal("different cluster addresses mapped to the same address")
 	}
 
@@ -105,8 +106,41 @@ func TestMapAddress(t *testing.T) {
 	if !ip.IsLoopback() {
 		t.Fatalf("MapAddress returned %q, which is not a loopback address", a)
 	}
+}
 
-	if got := ip.To4()[1]; got != 244 {
-		t.Fatalf("second octet: got %d, want the group 244", got)
+// The group lives in one bit, not a whole octet. Groups must still never
+// overlap, or a catapult tunnel could take a gateway tunnel's alias.
+func TestMapAddressGroupsDisjoint(t *testing.T) {
+	seen := make(map[string]byte)
+
+	for i := range 500 {
+		address := fmt.Sprintf("10.0.%d.%d", i/256, i%256)
+
+		for _, group := range []byte{0, 1} {
+			mapped := MapAddress(group, address)
+
+			if other, ok := seen[mapped]; ok && other != group {
+				t.Fatalf("groups %d and %d both produced %s", other, group, mapped)
+			}
+
+			seen[mapped] = group
+		}
+	}
+}
+
+// Reserving a whole octet for the group left only 16 bits of digest, which
+// collides well below the number of services a cluster-wide connect maps.
+func TestMapAddressCollisionMargin(t *testing.T) {
+	seen := make(map[string]string)
+
+	for i := range 1500 {
+		address := fmt.Sprintf("10.%d.%d.%d", i/65536, (i/256)%256, i%256)
+		mapped := MapAddress(0, address)
+
+		if previous, ok := seen[mapped]; ok {
+			t.Fatalf("%s and %s both mapped to %s", previous, address, mapped)
+		}
+
+		seen[mapped] = address
 	}
 }

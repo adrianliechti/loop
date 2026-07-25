@@ -108,16 +108,22 @@ func (t *Tunnel) equivalent(o *Tunnel) bool {
 	return slices.Equal(a, b)
 }
 
-// MapAddress derives a stable loopback address for a cluster address. The
-// second octet separates callers so that, for example, catapult and gateway
-// tunnels can never collide on the same alias.
+// MapAddress derives a stable loopback address for a cluster address. group
+// must be 0 or 1 and partitions the space so that, for example, catapult and
+// gateway tunnels can never collide on the same alias.
+//
+// 127.0.0.0/8 leaves 24 bits to work with. The group takes the top bit of the
+// second octet and the remaining 23 come from the digest; spending a whole
+// octet on the group instead would leave only 16, which starts colliding at a
+// few hundred addresses — well inside what a cluster-wide connect produces, and
+// a collision silently costs one of the two services its hosts entries.
 func MapAddress(group byte, address string) string {
 	h := md5.New()
 	io.WriteString(h, address)
 
 	addr := h.Sum(nil)[:4]
 	addr[0] = 127
-	addr[1] = group
+	addr[1] = addr[1]&0x7f | (group&0x01)<<7
 
 	return net.IP(addr).String()
 }
