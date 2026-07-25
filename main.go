@@ -10,12 +10,9 @@ import (
 
 	"github.com/adrianliechti/go-cli"
 	"github.com/adrianliechti/loop/app"
-	"github.com/adrianliechti/loop/app/bridge"
 	"github.com/adrianliechti/loop/app/build"
 	"github.com/adrianliechti/loop/app/connect"
 	"github.com/adrianliechti/loop/app/docker"
-	"github.com/adrianliechti/loop/app/granite"
-	"github.com/adrianliechti/loop/app/prism"
 	"github.com/adrianliechti/loop/app/run"
 	"github.com/adrianliechti/loop/app/tunnel"
 
@@ -54,15 +51,10 @@ func initApp() cli.Command {
 		},
 
 		Commands: []*cli.Command{
-			bridge.Command,
-
 			connect.Command,
 			tunnel.Command,
 
 			run.Command,
-
-			prism.Command,
-			granite.Command,
 
 			build.Command,
 			docker.Command,
