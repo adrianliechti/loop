@@ -154,12 +154,18 @@ func (c *Gateway) listTunnels(ctx context.Context) ([]*forward.Tunnel, error) {
 		var addr string
 
 		for _, p := range r.Spec.ParentRefs {
-			if p.Kind == nil || *p.Kind != "Gateway" {
+			if p.Kind != nil && *p.Kind != "Gateway" {
 				continue
 			}
 
+			namespace := r.Namespace
+
+			if p.Namespace != nil {
+				namespace = string(*p.Namespace)
+			}
+
 			for _, g := range gateways {
-				if g.Namespace != r.Namespace || g.Name != string(p.Name) {
+				if g.Namespace != namespace || g.Name != string(p.Name) {
 					continue
 				}
 

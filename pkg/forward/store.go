@@ -38,7 +38,13 @@ func (s *Store[T]) List() []T {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return slices.Collect(maps.Values(s.items))
+	items := make([]T, 0, len(s.items))
+
+	for _, key := range slices.Sorted(maps.Keys(s.items)) {
+		items = append(items, s.items[key])
+	}
+
+	return items
 }
 
 func (s *Store[T]) set(key string, item T) {
