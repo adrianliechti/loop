@@ -21,14 +21,31 @@ checksum:
 changelog:
   sort: asc
 
-brews:
-  - repository:
+# Homebrew casks support both macOS and Linux.
+homebrew_casks:
+  - name: loop
+    binaries: [loop]
+    # The publisher adds postflight_steps; GoReleaser's hooks still emit postflight.
+    skip_upload: true
+    homepage: "https://github.com/adrianliechti/loop"
+    description: "Build, run and connect applications for Kubernetes development"
+    repository:
       owner: adrianliechti
       name: homebrew-tap
 
     commit_author:
       name: Adrian Liechti
       email: adrian@localhost
+
+publishers:
+  - name: homebrew-cask
+    # Publish the extra cask file, excluding release archives.
+    ids: [homebrew-cask]
+    extra_files:
+      - glob: dist/homebrew/Casks/loop.rb
+    env:
+      - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
+    cmd: ./scripts/publish-cask.sh {{ .Version }}
 
 scoops:
   - repository:

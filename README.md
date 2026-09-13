@@ -7,7 +7,7 @@
 [Homebrew](https://brew.sh)
 
 ```
-brew install adrianliechti/tap/loop
+brew install --cask adrianliechti/tap/loop
 ```
 
 #### Windows
