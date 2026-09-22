@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+	streamhttp "k8s.io/streaming/pkg/httpstream"
 )
 
 func (c *client) ServicePortForward(ctx context.Context, namespace, name, address string, ports map[int]int, readyChan chan struct{}) error {
@@ -59,7 +60,7 @@ func (c *client) PodPortForward(ctx context.Context, namespace, name, address st
 		return err
 	}
 
-	forwarder, err := portforward.NewOnAddresses(dialer, []string{address}, mappings, ctx.Done(), readyChan, io.Discard, io.Discard)
+	forwarder, err := portforward.NewOnAddressesForStreaming(dialer, []string{address}, mappings, ctx.Done(), readyChan, io.Discard, io.Discard)
 
 	if err != nil {
 		return err
@@ -68,7 +69,7 @@ func (c *client) PodPortForward(ctx context.Context, namespace, name, address st
 	return forwarder.ForwardPorts()
 }
 
-func (c *client) createDialer(namespace, name string) (httpstream.Dialer, error) {
+func (c *client) createDialer(namespace, name string) (streamhttp.Dialer, error) {
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, name)
 
 	host := c.Config().Host
@@ -77,7 +78,7 @@ func (c *client) createDialer(namespace, name string) (httpstream.Dialer, error)
 
 	u := &url.URL{Scheme: "https", Path: path, Host: host}
 
-	primary, err := portforward.NewSPDYOverWebsocketDialer(u, c.Config())
+	primary, err := portforward.NewSPDYOverWebsocketDialerForStreaming(u, c.Config())
 
 	if err != nil {
 		return nil, err
@@ -89,9 +90,13 @@ func (c *client) createDialer(namespace, name string) (httpstream.Dialer, error)
 		return nil, err
 	}
 
-	secondary := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, u)
+	secondary := spdy.NewDialerForStreaming(upgrader, &http.Client{Transport: transport}, http.MethodPost, u)
 
-	return portforward.NewFallbackDialer(primary, secondary, func(err error) bool {
-		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
-	}), nil
+	return portforward.NewFallbackDialerForStreaming(primary, secondary, shouldFallbackToSPDY), nil
+}
+
+func shouldFallbackToSPDY(err error) bool {
+	return streamhttp.IsUpgradeFailure(err) ||
+		httpstream.IsUpgradeFailure(err) ||
+		streamhttp.IsHTTPSProxyError(err)
 }
