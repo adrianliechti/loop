@@ -12,7 +12,7 @@ var Command = &cli.Command{
 	Name:  "tunnel",
 	Usage: "forward local ports to hosts reachable from the cluster",
 
-	ArgsUsage: "host:port [host:port ...]",
+	ArgsUsage: "[localport:]host:port [[localport:]host:port ...]",
 
 	HideHelpCommand: true,
 

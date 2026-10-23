@@ -32,6 +32,10 @@ type RunOptions struct {
 	Container string
 
 	Forwards []ssh.PortForward
+
+	// OnCreate can customize the dedicated jump pod before it is created,
+	// including its image pull secrets. It is not called when Pod is set.
+	OnCreate func(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error
 }
 
 // Run forwards the local side of each configured forward to hosts reachable
@@ -67,23 +71,29 @@ func runViaPod(ctx context.Context, client kubernetes.Client, options *RunOption
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	podName := "loop-tunnel-" + uuid.NewString()[0:7]
+	pod := templatePod(options.Namespace, "loop-tunnel-"+uuid.NewString()[0:7], options.Image)
 
-	cli.Infof("★ creating tunnel pod %s/%s...", options.Namespace, podName)
+	if options.OnCreate != nil {
+		if err := options.OnCreate(ctx, client, pod); err != nil {
+			return err
+		}
+	}
 
-	if err := createPod(ctx, client, options.Namespace, podName, options.Image); err != nil {
+	cli.Infof("★ creating tunnel pod %s/%s...", pod.Namespace, pod.Name)
+
+	if err := createPod(ctx, client, pod); err != nil {
 		return err
 	}
 
 	defer func() {
-		cli.Infof("★ removing tunnel pod %s/%s...", options.Namespace, podName)
+		cli.Infof("★ removing tunnel pod %s/%s...", pod.Namespace, pod.Name)
 
-		if err := deletePod(context.Background(), client, options.Namespace, podName); err != nil {
-			cli.Warnf("★ failed to remove tunnel pod %s/%s: %v", options.Namespace, podName, err)
+		if err := deletePod(context.Background(), client, pod.Namespace, pod.Name); err != nil {
+			cli.Warnf("★ failed to remove tunnel pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		}
 	}()
 
-	if _, err := client.WaitForPod(ctx, options.Namespace, podName); err != nil {
+	if _, err := client.WaitForPod(ctx, pod.Namespace, pod.Name); err != nil {
 		return err
 	}
 
@@ -97,7 +107,7 @@ func runViaPod(ctx context.Context, client kubernetes.Client, options *RunOption
 	forwardDone := make(chan error, 1)
 
 	go func() {
-		forwardDone <- client.PodPortForward(ctx, options.Namespace, podName, "127.0.0.1", map[int]int{sshPort: 22}, forwardReady)
+		forwardDone <- client.PodPortForward(ctx, pod.Namespace, pod.Name, "127.0.0.1", map[int]int{sshPort: 22}, forwardReady)
 		cancel()
 	}()
 
@@ -137,7 +147,7 @@ func runViaPod(ctx context.Context, client kubernetes.Client, options *RunOption
 		return ctx.Err()
 	}
 
-	printForwards(options, podName)
+	printForwards(options, pod.Name)
 
 	select {
 	case err := <-forwardDone:
@@ -286,16 +296,17 @@ func printForwards(options *RunOptions, via string) {
 	cli.Info("★ Press Ctrl+C to disconnect")
 }
 
-func createPod(ctx context.Context, client kubernetes.Client, namespace, name, image string) error {
+func templatePod(namespace, name, image string) *corev1.Pod {
 	labels := map[string]string{
 		"app.kubernetes.io/name":     "loop-tunnel",
 		"app.kubernetes.io/instance": name,
 	}
 
-	pod := &corev1.Pod{
+	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labels,
 		},
 
 		Spec: corev1.PodSpec{
@@ -307,8 +318,10 @@ func createPod(ctx context.Context, client kubernetes.Client, namespace, name, i
 			},
 		},
 	}
+}
 
-	_, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
+func createPod(ctx context.Context, client kubernetes.Client, pod *corev1.Pod) error {
+	_, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 
 	return err
 }
@@ -321,18 +334,34 @@ func deletePod(ctx context.Context, client kubernetes.Client, namespace, name st
 	return nil
 }
 
-// ParseTargets parses host:port arguments into port forwards: listen locally
-// on 127.0.0.1 with the same port number and dial host:port from the pod.
+// ParseTargets parses [localport:]host:port arguments into port forwards:
+// listen on 127.0.0.1 using localport (defaulting to the remote port) and dial
+// host:port from the pod. IPv6 hosts must be enclosed in brackets.
 func ParseTargets(args []string) ([]ssh.PortForward, error) {
 	var result []ssh.PortForward
 
 	seen := map[int]string{}
 
 	for _, arg := range args {
-		host, portStr, err := net.SplitHostPort(arg)
+		target := arg
+		localPort := 0
+
+		if !strings.HasPrefix(target, "[") && strings.Count(target, ":") > 1 {
+			localPortStr, remoteTarget, _ := strings.Cut(target, ":")
+			port, err := parsePort(localPortStr)
+
+			if err != nil {
+				return nil, fmt.Errorf("invalid target %q: %w", arg, err)
+			}
+
+			localPort = port
+			target = remoteTarget
+		}
+
+		host, portStr, err := net.SplitHostPort(target)
 
 		if err != nil {
-			return nil, fmt.Errorf("invalid target %q: want host:port", arg)
+			return nil, fmt.Errorf("invalid target %q: want [localport:]host:port", arg)
 		}
 
 		if host == "" {
@@ -345,15 +374,19 @@ func ParseTargets(args []string) ([]ssh.PortForward, error) {
 			return nil, fmt.Errorf("invalid target %q: %w", arg, err)
 		}
 
-		if prev, ok := seen[port]; ok {
-			return nil, fmt.Errorf("targets %q and %q both need local port %d", prev, arg, port)
+		if localPort == 0 {
+			localPort = port
 		}
 
-		seen[port] = arg
+		if prev, ok := seen[localPort]; ok {
+			return nil, fmt.Errorf("targets %q and %q both need local port %d", prev, arg, localPort)
+		}
+
+		seen[localPort] = arg
 
 		result = append(result, ssh.PortForward{
 			LocalAddr: "127.0.0.1",
-			LocalPort: port,
+			LocalPort: localPort,
 
 			RemoteAddr: host,
 			RemotePort: port,

@@ -17,6 +17,42 @@ import (
 )
 
 func TestParseTargets(t *testing.T) {
+	for _, test := range []struct {
+		target     string
+		host       string
+		localPort  int
+		remotePort int
+	}{
+		{"db.internal:5432", "db.internal", 5432, 5432},
+		{"127.0.0.1:5432", "127.0.0.1", 5432, 5432},
+		{"[::1]:6379", "::1", 6379, 6379},
+		{"15432:db.internal:5432", "db.internal", 15432, 5432},
+		{"15432:127.0.0.1:5432", "127.0.0.1", 15432, 5432},
+		{"16379:[::1]:6379", "::1", 16379, 6379},
+		{"15432:[2001:db8::1]:5432", "2001:db8::1", 15432, 5432},
+		{"5432:db.internal:5432", "db.internal", 5432, 5432},
+		{"1:db.internal:65535", "db.internal", 1, 65535},
+		{"65535:db.internal:1", "db.internal", 65535, 1},
+	} {
+		t.Run(test.target, func(t *testing.T) {
+			forwards, err := ParseTargets([]string{test.target})
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(forwards) != 1 {
+				t.Fatalf("want 1 forward, got %d", len(forwards))
+			}
+
+			f := forwards[0]
+
+			if f.LocalAddr != "127.0.0.1" || f.LocalPort != test.localPort || f.RemoteAddr != test.host || f.RemotePort != test.remotePort {
+				t.Errorf("got %+v, want 127.0.0.1:%d => %s:%d", f, test.localPort, test.host, test.remotePort)
+			}
+		})
+	}
+
 	t.Run("valid", func(t *testing.T) {
 		forwards, err := ParseTargets([]string{"db.internal:5432", "[::1]:6379"})
 
@@ -48,12 +84,50 @@ func TestParseTargets(t *testing.T) {
 		}
 	})
 
+	t.Run("same remote port with different local ports", func(t *testing.T) {
+		forwards, err := ParseTargets([]string{"db1.internal:5432", "15432:db2.internal:5432"})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(forwards) != 2 || forwards[0].LocalPort != 5432 || forwards[1].LocalPort != 15432 {
+			t.Errorf("unexpected forwards: %+v", forwards)
+		}
+	})
+
+	t.Run("duplicate overridden local ports", func(t *testing.T) {
+		if _, err := ParseTargets([]string{"15432:db.internal:5432", "15432:[::1]:6379"}); err == nil {
+			t.Error("expected error for colliding local ports, got nil")
+		}
+	})
+
+	t.Run("overridden local port collides with default", func(t *testing.T) {
+		if _, err := ParseTargets([]string{"db.internal:5432", "5432:cache.internal:6379"}); err == nil {
+			t.Error("expected error for colliding local ports, got nil")
+		}
+	})
+
 	invalid := []string{
-		"db.internal",   // no port
-		":5432",         // no host
-		"db.internal:0", // port out of range
-		"db:99999",      // port out of range
-		"db:http",       // non-numeric port
+		"db.internal",     // no port
+		":5432",           // no host
+		"db.internal:0",   // port out of range
+		"db:99999",        // port out of range
+		"db:http",         // non-numeric port
+		"0:db:5432",       // local port out of range
+		"-1:db:5432",      // local port out of range
+		"65536:db:5432",   // local port out of range
+		"http:db:5432",    // non-numeric local port
+		":db:5432",        // empty local port
+		"15432::5432",     // empty host
+		"15432:db:0",      // remote port out of range
+		"15432:db:99999",  // remote port out of range
+		"15432:db:http",   // non-numeric remote port
+		"15432:db:",       // empty remote port
+		"15432:db:5432:1", // extra port
+		"::1:6379",        // unbracketed IPv6
+		"16379:::1:6379",  // unbracketed IPv6 with local port
+		"16379:[::1:6379", // missing IPv6 bracket
 	}
 
 	for _, arg := range invalid {
