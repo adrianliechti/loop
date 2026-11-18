@@ -259,9 +259,15 @@ func templatePod(container *Container, options *RunOptions) *corev1.Pod {
 		},
 	}
 
-	if options.SyncMode == SyncModeMount {
+	if options.SyncMode == SyncModeMount && len(container.Volumes) > 0 {
 		tunnel.SecurityContext.Privileged = kubernetes.Ptr(true)
 		tunnel.VolumeMounts[0].MountPropagation = kubernetes.Ptr(corev1.MountPropagationBidirectional)
+	} else if len(container.Ports) > 0 {
+		pod.Spec.SecurityContext = &corev1.PodSecurityContext{
+			Sysctls: []corev1.Sysctl{
+				{Name: "net.ipv4.ip_unprivileged_port_start", Value: "22"},
+			},
+		}
 	}
 
 	pod.Spec.Containers = append(pod.Spec.Containers, tunnel)

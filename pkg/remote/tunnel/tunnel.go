@@ -310,6 +310,11 @@ func templatePod(namespace, name, image string) *corev1.Pod {
 		},
 
 		Spec: corev1.PodSpec{
+			SecurityContext: &corev1.PodSecurityContext{
+				Sysctls: []corev1.Sysctl{
+					{Name: "net.ipv4.ip_unprivileged_port_start", Value: "22"},
+				},
+			},
 			Containers: []corev1.Container{
 				{
 					Name:  "tunnel",
